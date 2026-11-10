@@ -285,6 +285,20 @@ button:focus-visible,input:focus-visible{outline:3px solid var(--gold);outline-o
 .ledger:empty{display:none}
 .sheet-actions{display:flex;justify-content:flex-end;align-items:center;gap:8px;flex-wrap:wrap}
 .sheet-actions .note{margin-right:auto;color:var(--text-dim);font-size:13px}
+.start-sheet{max-width:400px;text-align:center;display:flex;flex-direction:column;align-items:center;gap:6px;padding:28px 24px}
+.start-logo{font-family:var(--font-display);font-weight:800;font-size:58px;line-height:1;color:var(--gold);text-shadow:0 4px 0 var(--cinnabar-deep),0 10px 24px rgba(0,0,0,.5)}
+.start-sub{color:var(--text-dim);font-size:14px;margin-bottom:14px}
+.start-actions{display:grid;gap:10px;width:100%}
+.btn.big{font-size:20px;padding:16px 20px;width:100%}
+.link-btn{background:none;border:none;color:var(--text-dim);text-decoration:underline;font-size:13px;cursor:pointer;padding:8px;margin-top:4px}
+.link-btn:hover{color:var(--gold-soft)}
+@media (orientation:landscape) and (max-height:520px), (orientation:portrait) and (max-width:600px) and (pointer:coarse){
+  .start-sheet{padding:16px 22px;gap:4px}
+  .start-logo{font-size:40px}
+  .start-sub{margin-bottom:8px}
+  .start-actions{grid-template-columns:1fr 1fr}
+  .btn.big{font-size:17px;padding:13px 14px}
+}
 .rules h3{font-family:var(--font-display);font-size:18px;color:var(--gold-soft);margin:16px 0 6px}
 .rules p,.rules li{font-size:14px;line-height:1.6;color:var(--text)}
 .rules ul{margin:0;padding-left:18px}
@@ -414,6 +428,7 @@ kbd{font-family:var(--font-body);font-size:12px;background:var(--lacquer);border
       <button id="btnSpeed" class="chip-btn" type="button">Vừa</button>
       <button id="btnFull" class="chip-btn" type="button" hidden aria-label="Toàn màn hình">⛶</button>
       <button id="btnNew" class="chip-btn gold" type="button">Ván mới</button>
+      <button id="btnLeaveTop" class="chip-btn" type="button" hidden>Thoát<span class="lg"> phòng</span></button>
     </div>
   </header>
 
@@ -445,6 +460,19 @@ kbd{font-family:var(--font-body);font-size:12px;background:var(--lacquer);border
       <button id="btnPlay" class="btn btn-play" type="button">Đánh <small id="playPreview"></small></button>
     </div>
   </footer>
+</div>
+
+<!-- Start screen -->
+<div class="modal start" id="startModal" hidden>
+  <div class="sheet start-sheet" role="dialog" aria-modal="true" aria-labelledby="startTitle">
+    <div class="start-logo" id="startTitle">Tiến Lên</div>
+    <div class="start-sub">Miền Nam · chiếu hoa ngày Tết</div>
+    <div class="start-actions">
+      <button class="btn btn-play big" id="btnStartBot" type="button">Chơi với máy</button>
+      <button class="btn btn-gold big" id="btnStartFriends" type="button">Chơi với bạn</button>
+    </div>
+    <button class="link-btn" id="btnStartRules" type="button">Xem luật chơi</button>
+  </div>
 </div>
 
 <!-- Name / avatar -->
@@ -1011,7 +1039,7 @@ function makeView(seat){
   return {
     phase:S.phase, room:NET.room, mySeat:seat, mode:MODE,
     seats:S.seats.map(s => ({ name:s.name, avatar:s.avatar, type:s.type, local:!!s.local,
-      online: s.type !== 'human' || !!s.local || !!s.connected })),
+      online: s.type !== 'human' || !!s.local || !!s.connected, left: s.type === 'human' && !s.connected && s.offlineSince === 0 })),
     chips:[...S.chips], counts:S.hands.map(h => h.length),
     myHand: seat >= 0 && S.hands[seat] ? [...S.hands[seat]] : [],
     hands: S.over ? S.hands.map(h => [...h]) : null,
@@ -1030,7 +1058,7 @@ function publish(){
     pubQueued = false;
     V = makeView(mySeat);
     render();
-    if (MODE === 'host') NET.seatConn.forEach((c, p) => { if (c) send(c, { t:'state', v:makeView(p) }); });
+    if (MODE === 'host'){ NET.seatConn.forEach((c, p) => { if (c) send(c, { t:'state', v:makeView(p) }); }); sendBackups(); saveHost(); }
   });
 }
 // Effects run here and on every guest screen.
@@ -1065,7 +1093,7 @@ function applyFx(type, a){
 const BROKERS = ['wss://broker.emqx.io:8084/mqtt', 'wss://broker.hivemq.com:8884/mqtt', 'wss://test.mosquitto.org:8081/mqtt'];
 const TOPIC = 'tlmn-chieuhoa/v2/';
 // Bump on every release: a guest whose browser still runs an older cached copy is asked to reload.
-const APP_VER = 9;
+const APP_VER = 11;
 const NET = { client:null, room:null, broker:0, seatConn:[null,null,null,null], conns:[], host:null, gid:null,
   lastHost:0, beat:null, helloT:null, leaving:false, welcomed:false, unknown:{} };
 const hasMqtt = () => !!(window.mqtt && typeof window.mqtt.connect === 'function');
@@ -1093,10 +1121,94 @@ async function keepAwake(){
 }
 
 // ---- Host ----
+// Topics per room:  .../h  messages to whoever is host now
+//                   .../g/<id>  messages to one guest
+//                   .../all  retained "who is host" notice (host epoch), so a host that comes back late steps down
 function guestConn(code, id){
   return { id, seat:-1, lastSeen:Date.now(), open:true,
     send(msg){ if (NET.client) NET.client.publish(TOPIC + code + '/g/' + id, JSON.stringify(msg), { qos:0 }); },
     close(){ this.open = false; NET.conns = NET.conns.filter(c => c !== this); } };
+}
+// One message router for every client this tab creates; what it does depends on the current role.
+function listen(client){
+  client.on('message', (topic, payload) => {
+    if (NET.client !== client) return;
+    let m; try { m = JSON.parse(decode(payload)); } catch(e){ return; }
+    if (!m || typeof m !== 'object') return;
+    const base = TOPIC + NET.room + '/';
+    if (topic === base + 'all') return onAnnounce(m);
+    if (topic === base + 'h'){ if (MODE === 'host') hostIncoming(m); return; }
+    if (MODE === 'guest' && topic === base + 'g/' + NET.gid){ NET.lastHost = Date.now(); onHostMsg(m); }
+  });
+}
+function hostIncoming(m){
+  if (!S || typeof m.from !== 'string' || m.from.length > 64) return;
+  let conn = NET.conns.find(c => c.id === m.from);
+  if (!conn){
+    if (m.t !== 'hello'){
+      // A browser we don't know (we just reloaded or just took over): ask it to introduce itself again.
+      const now = Date.now();
+      if (now - (NET.unknown[m.from] || 0) > 4000){ NET.unknown[m.from] = now; NET.client.publish(TOPIC + NET.room + '/g/' + m.from, JSON.stringify({ t:'rejoin' })); }
+      return;
+    }
+    conn = guestConn(NET.room, m.from);
+    NET.conns.push(conn);
+  }
+  conn.lastSeen = Date.now();
+  if (m.t === 'bye') return dropConn(conn);
+  onGuestMsg(conn, m);
+}
+function announceHost(){
+  if (MODE !== 'host' || !NET.client || !S) return;
+  NET.client.publish(TOPIC + NET.room + '/all',
+    JSON.stringify({ t:'host', epoch:S.epoch || 1, seat:mySeat, name:S.seats[mySeat].name, id:NET.hostId }), { qos:0, retain:true });
+}
+// Someone else says they are host. Newer epoch wins; if it isn't us, step down and rejoin as a player.
+function onAnnounce(m){
+  if (m.t !== 'host' || !m.id) return;
+  if (MODE === 'host'){
+    if (m.id === NET.hostId || !S) return;
+    const mine = S.epoch || 1;
+    if (m.epoch > mine || (m.epoch === mine && m.seat < mySeat)) demoteToGuest(m.name);
+  } else if (MODE === 'guest'){
+    NET.lastHost = Date.now();
+    if (NET.hostId && m.id !== NET.hostId && NET.welcomed) toast(`${m.name} giờ là chủ phòng`);
+    NET.hostId = m.id;
+  }
+}
+function demoteToGuest(name){
+  if (NET.leaving) return;
+  NET.leaving = true; clearInterval(NET.beat); clearTimeout(timer);
+  sess.del('host'); sess.set('seat', NET.room);
+  showMsg('Đã có chủ phòng mới', `Lúc bạn vắng, ${name || 'người khác'} đã lên làm chủ phòng. Đang đưa bạn vào lại phòng...`, [], true);
+  setTimeout(() => {
+    try { NET.client && NET.client.end(true); } catch(e){}
+    location.href = location.pathname + '?phong=' + NET.room + (NET.broker ? '&s=' + NET.broker : '');
+  }, 1500);
+}
+// Players who would take over, in order: the next people round the table who are here right now.
+function successors(){
+  const out = [];
+  for (let i = 1; i < 4; i++){
+    const p = (mySeat + i) % 4, s = S.seats[p];
+    if (s.type === 'human' && !s.local && s.connected && NET.seatConn[p]) out.push(p);
+  }
+  return out;
+}
+function backupFor(){ return { S, seq, hostSeat:mySeat, order:successors() }; }
+// Keep the next two players with a fresh copy of the game, so either can carry on if the host disappears.
+function sendBackups(){
+  const order = successors();
+  if (!order.length) return;
+  const b = { S, seq, hostSeat:mySeat, order };
+  order.slice(0, 2).forEach(p => send(NET.seatConn[p], { t:'backup', b }));
+}
+function startHosting(client, code, bi){
+  MODE = 'host'; NET.room = code; NET.broker = bi;
+  NET.hostId = Math.random().toString(36).slice(2, 10);
+  clearInterval(NET.beat);
+  NET.beat = setInterval(hostBeat, 2500);
+  keepAwake();
 }
 function createRoom(name, bi = 0){
   if (!hasMqtt()) return libMissing();
@@ -1104,7 +1216,7 @@ function createRoom(name, bi = 0){
   if (NET.client){ try { NET.client.end(true); } catch(e){} }
   const code = genCode();
   const client = connectBroker(bi, 'tlmn-h-' + code, false);
-  NET.client = client;
+  NET.client = client; NET.room = code;
   let ready = false;
   const failT = setTimeout(() => {
     if (ready || NET.client !== client) return;
@@ -1115,55 +1227,111 @@ function createRoom(name, bi = 0){
   }, 9000);
   client.on('connect', () => {
     if (NET.client !== client) return;
-    client.subscribe(TOPIC + code + '/h', { qos:1 });
+    client.subscribe([TOPIC + code + '/h', TOPIC + code + '/all'], { qos:1 });
     if (ready){ wakeGuests(); return; } // reconnected after the phone woke up
     ready = true; clearTimeout(failT);
     clearTimeout(timer);
-    MODE = 'host'; mySeat = 0; NET.room = code; NET.broker = bi;
-    S = baseState([{ type:'human', local:true, name, avatar:profile.avatar }, emptySeat(), emptySeat(), emptySeat()], [START,START,START,START]);
-    S.phase = 'lobby';
+    mySeat = 0;
+    S = baseState([{ type:'human', local:true, name, avatar:profile.avatar, token:profile.token }, emptySeat(), emptySeat(), emptySeat()], [START,START,START,START]);
+    S.phase = 'lobby'; S.epoch = 1;
     S.inGame = [false,false,false,false];
+    startHosting(client, code, bi);
     try { history.replaceState(null, '', roomLink(code, bi).slice(location.origin.length)); } catch(e){}
     hideMsg();
     roomOpen = true;
     publish();
-    clearInterval(NET.beat);
-    NET.beat = setInterval(hostBeat, 2500);
-    keepAwake();
+    announceHost();
   });
-  client.on('message', (topic, payload) => {
-    if (NET.client !== client || !S) return;
-    let m; try { m = JSON.parse(decode(payload)); } catch(e){ return; }
-    if (!m || typeof m !== 'object' || typeof m.from !== 'string' || m.from.length > 64) return;
-    let conn = NET.conns.find(c => c.id === m.from);
-    if (!conn){
-      if (m.t !== 'hello'){
-        // A browser we don't know (e.g. we dropped it): ask it to introduce itself again.
-        const now = Date.now();
-        if (now - (NET.unknown[m.from] || 0) > 4000){ NET.unknown[m.from] = now; client.publish(TOPIC + code + '/g/' + m.from, JSON.stringify({ t:'rejoin' })); }
-        return;
-      }
-      conn = guestConn(code, m.from);
-      NET.conns.push(conn);
-    }
-    conn.lastSeen = Date.now();
-    if (m.t === 'bye') return dropConn(conn);
-    onGuestMsg(conn, m);
+  listen(client);
+}
+// The host's whole game lives in this tab: keep a copy so pressing F5 brings the room back.
+const sess = {
+  get(k){ try { return JSON.parse(sessionStorage.getItem('tlmn:' + k)); } catch(e){ return null; } },
+  set(k, v){ try { sessionStorage.setItem('tlmn:' + k, JSON.stringify(v)); } catch(e){} },
+  del(k){ try { sessionStorage.removeItem('tlmn:' + k); } catch(e){} },
+};
+function saveHost(){
+  if (MODE === 'host' && S && NET.room) sess.set('host', { code:NET.room, bi:NET.broker, S, seq, seat:mySeat, t:Date.now() });
+}
+// Carry on a game from a saved copy: after F5, or when taking over from a host who left.
+function resumeGame(){
+  if (S.phase === 'lobby'){ roomOpen = true; return; }
+  if (S.phase === 'play' && !S.over){
+    if (S.current < 0) newGame();
+    else if (S.waiting && ((S.table && S.lastPlayer === S.current) || S.passed[S.current])) advance();
+    else startTurn();
+  } else if (S.phase === 'play' && S.over && !S.endShown) later(showEnd, 500);
+}
+function resumeRoom(save){
+  if (!hasMqtt()) return libMissing();
+  showMsg(`Đang mở lại phòng ${save.code}...`, 'Ván bài vẫn còn nguyên, chờ chút xíu nha.', [], true);
+  const code = save.code, bi = save.bi || 0;
+  const client = connectBroker(bi, 'tlmn-h-' + code, false);
+  NET.client = client; NET.room = code; NET.broker = bi;
+  let ready = false;
+  const failT = setTimeout(() => {
+    if (ready || NET.client !== client) return;
+    showMsg('Chưa mở lại được phòng', NET_BLOCKED, [{ label:'Chơi một mình', act:goSolo }, { label:'Thử lại', primary:true, act:() => location.reload() }]);
+  }, 12000);
+  client.on('connect', () => {
+    if (NET.client !== client) return;
+    client.subscribe([TOPIC + code + '/h', TOPIC + code + '/all'], { qos:1 });
+    if (ready){ wakeGuests(); return; }
+    ready = true; clearTimeout(failT);
+    mySeat = save.seat || 0;
+    S = save.S; seq = save.seq || seq;
+    // Guests reconnect on their own within a few seconds; until then keep waiting for them like normal.
+    NET.seatConn = [null,null,null,null]; NET.conns = []; NET.resumedAt = Date.now();
+    startHosting(client, code, bi);
+    hideMsg();
+    publish();
+    announceHost();
+    toast('Đã mở lại phòng, mọi người đang vào lại...');
+    resumeGame();
   });
+  listen(client);
+}
+// A guest steps up as host, from the last copy of the game the old host sent.
+function becomeHost(b, handed){
+  if (MODE !== 'guest' || NET.leaving || !b || !b.S) return;
+  const now = Date.now(), oldSeat = b.hostSeat;
+  clearInterval(NET.beat); clearTimeout(NET.helloT);
+  S = b.S; seq = Math.max(seq, b.seq || 0);
+  S.epoch = (S.epoch || 1) + 1;
+  S.seats.forEach((s, i) => {
+    if (s.type !== 'human') return;
+    if (i === mySeat) Object.assign(s, { local:true, connected:true, token:profile.token });
+    else s.local = false;
+  });
+  const old = S.seats[oldSeat];
+  if (old && old.type === 'human'){ old.connected = false; old.offlineSince = handed ? 0 : now; }
+  NET.seatConn = [null,null,null,null]; NET.conns = []; NET.resumedAt = now; NET.backup = null;
+  NET.client.subscribe(TOPIC + NET.room + '/h', { qos:1 });
+  sess.del('seat');
+  startHosting(NET.client, NET.room, NET.broker);
+  hideMsg();
+  publish();
+  announceHost();
+  toast(handed ? 'Bạn được giao làm chủ phòng' : 'Chủ phòng cũ mất kết nối, giờ bạn làm chủ phòng');
+  resumeGame();
 }
 // After the host's phone was asleep: don't count the pause against the guests, and resend everyone's view.
 function wakeGuests(){
   if (MODE !== 'host') return;
   const now = Date.now();
   NET.conns.forEach(c => { c.lastSeen = now; });
+  announceHost();
   publish();
 }
 function hostBeat(){
   if (document.visibilityState !== 'visible') return;
   const now = Date.now();
+  announceHost();
   NET.conns.forEach(c => send(c, { t:'ping' }));
   NET.seatConn.forEach((c, p) => {
-    if (c && S.seats[p].type === 'human' && S.seats[p].connected && now - c.lastSeen > 12000) markOffline(p);
+    const st = S.seats[p];
+    if (st.type !== 'human' || st.local || !st.connected) return;
+    if (c ? now - c.lastSeen > 12000 : now - (NET.resumedAt || 0) > 12000) markOffline(p);
   });
   // forget browsers that never took a seat
   NET.conns.filter(c => c.seat < 0 && now - c.lastSeen > 30000).forEach(c => c.close());
@@ -1180,8 +1348,8 @@ function markOffline(p, closed){
     S.seats[p] = emptySeat();
     fx('toast', `${s.name} đã rời phòng`);
   } else if (s.connected){
-    s.connected = false; s.offlineSince = Date.now();
-    fx('toast', S.over ? `${s.name} đang tạm vắng` : `${s.name} mất kết nối, máy đánh hộ`);
+    s.connected = false; s.offlineSince = closed ? 0 : Date.now();
+    fx('toast', closed ? `${s.name} đã rời phòng, máy đánh nốt ván này` : S.over ? `${s.name} đang tạm vắng` : `${s.name} mất kết nối, máy đánh hộ`);
     if (!S.over && !S.waiting && S.current === p) later(() => botAct(p), 900);
   }
   publish();
@@ -1238,7 +1406,7 @@ function hello(conn, m){
     fx('sfx', 'turn');
   }
   NET.seatConn[p] = conn; conn.seat = p;
-  send(conn, { t:'welcome', seat:p, room:NET.room, ver:APP_VER });
+  send(conn, { t:'welcome', seat:p, room:NET.room, ver:APP_VER, hostId:NET.hostId });
   if (+m.ver > APP_VER) toast('Máy bạn đang chạy bản game cũ hơn. Hết ván thì đóng phòng, tải lại trang nhé.');
   if (!S.over && S.phase === 'play' && !S.waiting && S.current === p) startTurn();
   else publish();
@@ -1266,14 +1434,15 @@ function joinRoom(code, name, bi = 0){
   NET.gid = 'tlmn-g-' + code + '-' + Math.random().toString(36).slice(2, 8);
   const client = connectBroker(bi, NET.gid, true);
   NET.client = client;
-  NET.host = { open:true, send(msg){ client.publish(TOPIC + code + '/h', JSON.stringify({ ...msg, from:NET.gid }), { qos:1 }); } };
+  NET.host = { open:true, send(msg){ NET.client.publish(TOPIC + code + '/h', JSON.stringify({ ...msg, from:NET.gid }), { qos:1 }); } };
   const sayHello = () => send(NET.host, { t:'hello', name:profile.name || name, avatar:profile.avatar, token:profile.token, ver:APP_VER });
   const failT = setTimeout(() => { if (!connected) fail('Chưa vào được phòng', NET_BLOCKED); }, 12000);
   client.on('connect', () => {
     if (NET.client !== client || failed) return;
     const first = !connected;
     connected = true; clearTimeout(failT);
-    client.subscribe(TOPIC + code + '/g/' + NET.gid, { qos:0 }, () => {
+    if (MODE === 'host'){ client.subscribe([TOPIC + code + '/h', TOPIC + code + '/all'], { qos:1 }); wakeGuests(); return; } // took over earlier
+    client.subscribe([TOPIC + code + '/g/' + NET.gid, TOPIC + code + '/all'], { qos:0 }, () => {
       sayHello();
       if (first){
         NET.helloT = setTimeout(() => {
@@ -1285,27 +1454,29 @@ function joinRoom(code, name, bi = 0){
       }
     });
   });
-  client.on('message', (topic, payload) => {
-    if (NET.client !== client || failed) return;
-    let m; try { m = JSON.parse(decode(payload)); } catch(e){ return; }
-    NET.lastHost = Date.now();
-    onHostMsg(m);
-  });
+  listen(client);
   clearInterval(NET.beat);
-  NET.beat = setInterval(() => {
-    if (!NET.welcomed || NET.leaving || document.visibilityState !== 'visible') return;
-    send(NET.host, { t:'ping' });
-    const gap = Date.now() - NET.lastHost;
-    if (gap > 90000) hostLost();
-    else if (gap > 10000) toast('Chủ phòng đang tạm vắng, chờ chút nha...');
-  }, 2500);
+  NET.beat = setInterval(guestBeat, 2500);
   keepAwake();
 }
+function guestBeat(){
+  if (MODE !== 'guest' || !NET.welcomed || NET.leaving || document.visibilityState !== 'visible') return;
+  send(NET.host, { t:'ping' });
+  const gap = Date.now() - NET.lastHost;
+  // The host has been silent: the first in line takes over after 25s, the next one 10s later, and so on.
+  if (NET.backup){
+    const rank = NET.backup.order.indexOf(mySeat);
+    if (rank >= 0 && gap > 25000 + rank * 10000) return becomeHost(NET.backup, false);
+  }
+  if (gap > 90000) hostLost();
+  else if (gap > 10000) toast('Chủ phòng đang tạm vắng, chờ chút nha...');
+}
 function onHostMsg(m){
-  if (!m || typeof m !== 'object') return;
   switch (m.t){
     case 'welcome':
       mySeat = m.seat; NET.welcomed = true; clearTimeout(NET.helloT);
+      if (m.hostId) NET.hostId = m.hostId;
+      sess.set('seat', NET.room);
       if (!$('#msgModal').hidden) hideMsg();
       if (+m.ver > APP_VER){
         // our browser served an old cached copy: reload with a fresh URL to get the new one, then rejoin the same seat
@@ -1321,11 +1492,13 @@ function onHostMsg(m){
       sel = new Set([...sel].filter(c => V.myHand.includes(c)));
       render();
       break;
+    case 'backup': if (m.b && m.b.S) NET.backup = m.b; break;
+    case 'handover': becomeHost(m.b, true); break;
     case 'fx': applyFx(m.type, m.a || []); break;
     case 'err': toast(m.msg); break;
     case 'rejoin': send(NET.host, { t:'hello', name:profile.name, avatar:profile.avatar, token:profile.token, ver:APP_VER }); break;
-    case 'full': NET.leaving = true; showMsg('Phòng đã đủ 4 người', 'Đợi có người rời phòng rồi vào lại, hoặc chơi một mình với máy.', [{ label:'Chơi một mình', primary:true, act:goSolo }]); break;
-    case 'closed': NET.leaving = true; showMsg('Chủ phòng đã đóng phòng', 'Ván chơi đã kết thúc.', [{ label:'Chơi một mình', primary:true, act:goSolo }]); break;
+    case 'full': NET.leaving = true; sess.del('seat'); showMsg('Phòng đã đủ 4 người', 'Đợi có người rời phòng rồi vào lại, hoặc chơi một mình với máy.', [{ label:'Chơi một mình', primary:true, act:goSolo }]); break;
+    case 'closed': NET.leaving = true; sess.del('seat'); showMsg('Phòng đã đóng', 'Chủ phòng đã đóng phòng.', [{ label:'Về màn hình chính', primary:true, act:goHome }]); break;
   }
 }
 function hostLost(){
@@ -1342,17 +1515,40 @@ function onVisible(){
   if (MODE === 'host') wakeGuests();
   else if (NET.welcomed){ NET.lastHost = Date.now(); send(NET.host, { t:'sync' }); }
 }
+function closeConnection(to){
+  NET.leaving = true;
+  sess.del('seat'); sess.del('host');
+  setTimeout(() => { try { NET.client && NET.client.end(true); } catch(e){} location.href = to; }, 400);
+}
 function goSolo(){
   if (MODE === 'guest' && NET.host) send(NET.host, { t:'bye' });
-  NET.leaving = true;
-  setTimeout(() => { try { NET.client && NET.client.end(true); } catch(e){} location.href = location.pathname; }, 150);
+  closeConnection(location.pathname + '?solo=1');
 }
+function goHome(){ closeConnection(location.pathname); }
+// "Thoát phòng": a guest just leaves; a host hands the room to the next player first (or closes it if alone).
 function leaveRoom(){
+  if (MODE === 'solo') return;
+  let text;
   if (MODE === 'host'){
-    showMsg('Đóng phòng?', 'Mọi người trong phòng sẽ bị ngắt kết nối.', [
-      { label:'Ở lại', act:hideMsg },
-      { label:'Đóng phòng', primary:true, act:() => { NET.conns.forEach(c => send(c, { t:'closed' })); setTimeout(goSolo, 300); } }]);
-  } else goSolo();
+    const next = successors();
+    text = next.length ? `Quyền chủ phòng sẽ giao cho ${S.seats[next[0]].name}, mọi người vẫn chơi tiếp.` : 'Trong phòng chỉ còn mình bạn, phòng sẽ đóng.';
+  } else text = V && V.phase === 'play' && !V.over && V.inGame[mySeat] ? 'Máy sẽ đánh nốt ván này thay bạn, sau đó ghế để trống.' : 'Ghế của bạn sẽ để trống. Mở lại link phòng là vào lại được.';
+  showMsg('Thoát phòng?', text, [
+    { label:'Ở lại', act:hideMsg },
+    { label:'Thoát phòng', primary:true, act:() => {
+      if (MODE === 'host'){
+        const next = successors();
+        if (next.length){
+          // the old host's seat is played by the machine until the game ends, then freed
+          S.seats[mySeat].offlineSince = 0;
+          send(NET.seatConn[next[0]], { t:'handover', b:backupFor() });
+        } else {
+          NET.conns.forEach(c => send(c, { t:'closed' }));
+          if (NET.client) NET.client.publish(TOPIC + NET.room + '/all', '', { qos:0, retain:true });
+        }
+      } else if (NET.host) send(NET.host, { t:'bye' });
+      closeConnection(location.pathname);
+    } }]);
 }
 
 // ================= Rendering =================
@@ -1394,6 +1590,7 @@ function renderHeader(){
   $('#btnInvite').textContent = online ? 'Mời bạn' : 'Chơi với bạn';
   $('#btnNew').hidden = MODE === 'guest';
   $('#btnSpeed').hidden = MODE !== 'solo';
+  $('#btnLeaveTop').hidden = MODE === 'solo';
   const badge = $('#roomBadge');
   badge.hidden = !online || !V.room;
   if (!badge.hidden) badge.textContent = 'Phòng ' + V.room;
@@ -1406,7 +1603,7 @@ function renderSeats(){
     const playing = V.phase === 'play';
     el.classList.toggle('empty', s.type === 'empty');
     el.querySelector('.avatar').textContent = s.avatar || '';
-    el.querySelector('.name').textContent = s.type === 'empty' ? (playing ? 'Ghế trống' : 'Đang chờ...') : s.name;
+    el.querySelector('.name').textContent = s.type === 'empty' ? (playing ? 'Ghế trống' : V.phase === 'lobby' ? 'Đang chờ...' : '') : s.name;
     el.querySelector('.chip-n').textContent = s.type === 'empty' ? '' : fmt(V.chips[p]) + ' xu';
     el.querySelector('.chips').hidden = s.type === 'empty';
     const isActive = playing && !V.over && V.current === p;
@@ -1414,12 +1611,12 @@ function renderSeats(){
     const tag = el.querySelector('.tag');
     let t = '', cls = 'tag';
     const fi = V.finished.indexOf(p);
-    if (!playing) t = s.type === 'empty' ? '' : (s.local && MODE === 'host' ? 'Chủ phòng' : '');
+    if (!playing) t = s.type === 'empty' ? '' : (s.local && MODE !== 'solo' ? 'Chủ phòng' : '');
     else if (s.type === 'empty') t = '';
     else if (!V.inGame[p]){ t = 'Chờ ván sau'; cls += ' soft'; }
     else if (V.cong.includes(p)){ t = 'Cóng'; cls += ' bad'; }
     else if (fi >= 0){ t = V.toiTrang && fi === 0 ? 'Tới trắng' : placeLabel(fi, playersV()); if (fi === 0) cls += ' win'; }
-    else if (!s.online){ t = 'Mất kết nối'; cls += ' bad'; }
+    else if (!s.online){ t = s.left ? 'Đã rời' : 'Mất kết nối'; cls += ' bad'; }
     else if (!V.over && V.table && V.passed[p]) t = 'Bỏ lượt';
     else if (MODE !== 'solo' && s.type === 'bot'){ t = 'Máy'; cls += ' soft'; }
     tag.hidden = !t; tag.textContent = t; tag.className = cls;
@@ -1482,7 +1679,7 @@ function renderPile(){
   else prevEl.innerHTML = '';
   if (!cur){
     curEl.innerHTML = ''; lastPileId = -1;
-    if (V.phase !== 'play') label.textContent = 'Đang chờ người chơi...';
+    if (V.phase !== 'play') label.textContent = V.phase === 'lobby' ? 'Đang chờ người chơi...' : '';
     else if (V.over || V.current < 0) label.textContent = '';
     else label.textContent = `Vòng mới · ${V.current === mySeat ? 'bạn' : nameV(V.current)} ra bài` + (V.mustInclude != null ? ` (kèm ${cardName(V.mustInclude)})` : '');
     return;
@@ -1615,15 +1812,15 @@ function fillRoom(){
     let role = '', rc = 's-role';
     if (s.type === 'empty'){ role = 'Ghế trống'; rc += ' wait'; }
     else if (s.type === 'bot') role = 'Máy';
-    else if (!s.online){ role = 'Mất kết nối'; rc += ' off'; }
+    else if (!s.online){ role = s.left ? 'Đã rời' : 'Mất kết nối'; rc += ' off'; }
     else if (!lobby && !V.over && !V.inGame[p]){ role = 'Chờ ván sau'; rc += ' wait'; }
-    else role = (p === 0 ? 'Chủ phòng' : 'Người chơi');
+    else role = (s.local ? 'Chủ phòng' : 'Người chơi');
     return `<li class="${p === mySeat ? 'me' : ''}"><span class="s-av">${esc(s.avatar || '🪑')}</span>
       <span class="s-name">${esc(s.name)}${p === mySeat ? ' (bạn)' : ''}</span><span class="${rc}">${role}</span></li>`;
   }).join('');
   $('#btnStart').hidden = !(MODE === 'host' && lobby);
   $('#btnRoomClose').hidden = lobby;
-  $('#btnLeave').textContent = MODE === 'host' ? 'Đóng phòng' : 'Rời phòng';
+  $('#btnLeave').textContent = 'Thoát phòng';
   const humans = V.seats.filter(s => s.type === 'human').length;
   $('#btnStart').disabled = humans < 2;
   $('#roomNote').textContent = lobby && MODE !== 'host' ? 'Chờ chủ phòng chia bài...'
@@ -1853,6 +2050,7 @@ function bind(){
   $('#btnRoomClose').addEventListener('click', () => { roomOpen = false; render(); });
   $('#btnStart').addEventListener('click', startOnline);
   $('#btnLeave').addEventListener('click', leaveRoom);
+  $('#btnLeaveTop').addEventListener('click', leaveRoom);
   $('#btnCopy').addEventListener('click', () => {
     const inp = $('#roomLink'), done = () => { $('#btnCopy').textContent = 'Đã chép!'; setTimeout(() => { $('#btnCopy').textContent = 'Chép link'; }, 1600); };
     const fallback = () => { inp.select(); try { document.execCommand('copy'); done(); } catch(e){ toast('Chọn link rồi chép thủ công nhé'); } };
@@ -1881,8 +2079,11 @@ function bind(){
   });
   $('#btnNameCancel').addEventListener('click', () => {
     if ($('#nameModal').dataset.kind === 'join') goSolo();
-    else $('#nameModal').hidden = true;
+    else { $('#nameModal').hidden = true; if (!S) $('#startModal').hidden = false; }
   });
+  $('#btnStartBot').addEventListener('click', startSolo);
+  $('#btnStartFriends').addEventListener('click', () => { $('#startModal').hidden = true; askName('create'); });
+  $('#btnStartRules').addEventListener('click', () => { $('#rulesModal').hidden = false; $('#btnCloseRules').focus(); });
   // settings
   const syncTools = () => {
     $('#btnSound').innerHTML = (settings.sound ? '🔊' : '🔇') + '<span class="lg"> Âm thanh</span>';
@@ -1916,15 +2117,12 @@ function bind(){
     lastTouch = now;
   }, { passive:false });
   let rt; window.addEventListener('resize', () => { clearTimeout(rt); rt = setTimeout(() => { lastPileId = -1; if (V){ renderPile(); renderHand(); } }, 120); });
-  window.addEventListener('beforeunload', e => {
-    if (MODE === 'host' && NET.seatConn.some(Boolean) && !NET.leaving){ e.preventDefault(); e.returnValue = ''; }
-  });
   document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') onVisible(); });
 }
 
 // ================= Boot =================
-function waitingView(){
-  return { phase:'connecting', room:null, mySeat:0, seats:[0,1,2,3].map(() => ({ ...emptySeat(), online:true })),
+function waitingView(phase = 'connecting'){
+  return { phase, room:null, mySeat:0, seats:[0,1,2,3].map(() => ({ ...emptySeat(), online:true })),
     chips:[0,0,0,0], counts:[0,0,0,0], myHand:[], hands:null, current:-1, table:null, prevTable:null,
     passed:[false,false,false,false], finished:[], cong:[], inGame:[false,false,false,false], mustInclude:null, over:true, waiting:true,
     toiTrang:null, endShown:false, refill:[], gameNo:0, ledger:[], turnLeft:null, turnKey:0 };
@@ -1954,12 +2152,27 @@ $('#btnFull').addEventListener('click', () => {
 
 const code = (new URLSearchParams(location.search).get('phong') || '').toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 8);
 const brokerIdx = Math.max(0, Math.min(BROKERS.length - 1, parseInt(new URLSearchParams(location.search).get('s') || '0', 10) || 0));
-if (code){
+function startSolo(){
+  $('#startModal').hidden = true;
+  MODE = 'solo'; S = soloState(); newGame();
+}
+const hostSave = sess.get('host');
+if (code && hostSave && hostSave.code === code && Date.now() - hostSave.t < 30 * 60000){
+  // the host pressed F5: bring the same room and game back
+  V = waitingView(); render();
+  resumeRoom(hostSave);
+} else if (code){
   MODE = 'guest'; NET.room = code; NET.broker = brokerIdx;
   V = waitingView(); render();
-  askName('join', code);
+  // already sat at this table in this tab (F5): rejoin the same seat without asking again
+  if (sess.get('seat') === code && profile.name) joinRoom(code, profile.name, brokerIdx);
+  else askName('join', code);
+} else if (new URLSearchParams(location.search).get('solo')){
+  try { history.replaceState(null, '', location.pathname); } catch(e){}
+  startSolo();
 } else {
-  MODE = 'solo'; S = soloState(); newGame();
+  MODE = 'solo'; V = waitingView('menu'); render();
+  $('#startModal').hidden = false;
 }
 
 // ---- Vietnamese Telex for the built-in keyboard ----
