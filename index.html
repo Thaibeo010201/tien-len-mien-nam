@@ -2,7 +2,7 @@
 <html lang="vi">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
 <title>Tiến Lên Miền Nam</title>
 <meta name="description" content="Vào phòng chơi Tiến Lên Miền Nam cùng bạn bè ngay trên trình duyệt. Thiếu người thì có máy đánh cùng.">
 <meta property="og:title" content="Vô chơi Tiến Lên Miền Nam nè!">
@@ -25,6 +25,7 @@
   --paper:#fffaf0; --paper-edge:#e4d5b8; --ink-black:#1b1b22; --ink-red:#c42a22;
   --text:#f6e9d6; --text-dim:#c4a88c;
   --shadow:rgba(0,0,0,.35);
+  --wood:#5a2a17; --wood-dark:#2a120c;
   --font-display:'Baloo 2','Be Vietnam Pro',system-ui,sans-serif;
   --font-body:'Be Vietnam Pro',system-ui,-apple-system,'Segoe UI',sans-serif;
   color-scheme:dark;
@@ -42,6 +43,10 @@ body{
   -webkit-tap-highlight-color:transparent;
 }
 button,input{font:inherit;color:inherit}
+/* No double-tap zoom anywhere: tapping cards fast must only select them. */
+html,body,button,input,.card{touch-action:manipulation}
+html{-webkit-text-size-adjust:100%;text-size-adjust:100%}
+button{-webkit-user-select:none;user-select:none}
 button:focus-visible,input:focus-visible{outline:3px solid var(--gold);outline-offset:2px}
 
 #app{
@@ -81,9 +86,20 @@ button:focus-visible,input:focus-visible{outline:3px solid var(--gold);outline-o
   box-shadow:
     inset 0 0 0 7px var(--mat-deep), inset 0 0 0 11px var(--cinnabar),
     inset 0 0 0 14px var(--mat), inset 0 0 0 17px var(--jade),
-    inset 0 0 0 19px var(--mat-deep), 0 18px 40px var(--shadow);
+    inset 0 0 0 19px var(--mat-deep), inset 0 0 70px rgba(90,50,10,.38),
+    0 0 0 5px var(--wood), 0 0 0 7px var(--gold), 0 0 0 13px var(--wood-dark), 0 22px 44px rgba(0,0,0,.6);
+  margin:10px 14px;
 }
-.mat::before{content:"";position:absolute;inset:30px;border:2px dashed rgba(143,31,24,.22);border-radius:16px;pointer-events:none}
+.mat::before{content:"";position:absolute;inset:30px;border:2px dashed rgba(143,31,24,.2);border-radius:16px;pointer-events:none}
+/* Lozenge medallion woven into the middle of the mat, under the played cards */
+.mat::after{content:"";position:absolute;left:50%;top:50%;height:58%;aspect-ratio:1;transform:translate(-50%,-50%) rotate(45deg);pointer-events:none;z-index:0;border-radius:16px;
+  border:3px double rgba(143,31,24,.32);
+  background:
+    radial-gradient(circle at 50% 50%, rgba(199,54,43,.09) 0 16%, transparent 17% 26%, rgba(47,125,91,.10) 27% 30%, transparent 31%),
+    repeating-linear-gradient(0deg, rgba(143,31,24,.06) 0 2px, transparent 2px 12px),
+    repeating-linear-gradient(90deg, rgba(143,31,24,.06) 0 2px, transparent 2px 12px)}
+.mat > *{position:relative;z-index:1}
+.mat > .banner,.mat > .toast{position:absolute}
 .mat.shake{animation:shake .5s}
 @keyframes shake{0%,100%{transform:none}20%{transform:translate(-6px,2px) rotate(-.4deg)}40%{transform:translate(6px,-2px) rotate(.4deg)}60%{transform:translate(-4px,1px)}80%{transform:translate(3px,0)}}
 .room-badge{position:absolute;right:30px;bottom:24px;z-index:3;font-size:12px;font-weight:700;color:var(--mat-ink);background:rgba(255,250,240,.55);padding:3px 10px;border-radius:999px;border:none;cursor:pointer}
@@ -96,7 +112,7 @@ button:focus-visible,input:focus-visible{outline:3px solid var(--gold);outline-o
 .seat[data-v="1"]{grid-area:right}
 .seat[data-v="0"]{grid-area:me;flex-direction:row;gap:10px}
 .av-wrap{position:relative}
-.avatar{width:56px;height:56px;border-radius:50%;display:grid;place-items:center;font-size:31px;line-height:1;background:var(--paper);box-shadow:0 0 0 3px var(--cinnabar-dark),0 4px 10px var(--shadow);transition:box-shadow .25s}
+.avatar{width:56px;height:56px;border-radius:50%;display:grid;place-items:center;font-size:31px;line-height:1;background:radial-gradient(circle at 40% 35%, #fff, var(--paper) 60%, var(--paper-edge));box-shadow:0 0 0 3px var(--gold),0 0 0 5px var(--cinnabar-dark),0 5px 12px var(--shadow);transition:box-shadow .25s}
 .seat.active .avatar{box-shadow:0 0 0 3px var(--gold),0 0 0 7px rgba(230,180,80,.45),0 0 26px 8px rgba(230,180,80,.65);animation:pulse 1.1s ease-in-out infinite}
 @keyframes pulse{50%{transform:scale(1.07)}}
 .seat.out .avatar{filter:grayscale(.7);opacity:.75}
@@ -108,7 +124,8 @@ button:focus-visible,input:focus-visible{outline:3px solid var(--gold);outline-o
 @keyframes drain{from{transform:scaleX(var(--from,1))}to{transform:scaleX(0)}}
 .secs{position:absolute;left:-8px;top:-6px;min-width:26px;height:26px;padding:0 5px;border-radius:13px;background:var(--lacquer);color:var(--gold);font-family:var(--font-display);font-weight:800;font-size:14px;display:grid;place-items:center;font-variant-numeric:tabular-nums;box-shadow:0 0 0 2px var(--gold),0 2px 6px var(--shadow);z-index:4}
 .secs.hurry{background:var(--cinnabar);color:var(--paper);box-shadow:0 0 0 2px var(--paper),0 2px 6px var(--shadow);animation:pulse .5s ease-in-out infinite}
-.meta{display:flex;flex-direction:column;align-items:center;gap:1px;min-width:0;max-width:100%}
+.meta{display:flex;flex-direction:column;align-items:center;gap:1px;min-width:0;max-width:100%;background:rgba(255,250,240,.78);padding:3px 11px 4px;border-radius:12px;box-shadow:0 1px 3px rgba(59,36,18,.25)}
+.seat.empty .meta{background:transparent;box-shadow:none}
 .seat[data-v="0"] .meta{align-items:flex-start}
 .name{font-family:var(--font-display);font-weight:800;font-size:16px;line-height:1.1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%}
 .chips{font-size:12px;font-weight:600;font-variant-numeric:tabular-nums;display:flex;align-items:center;gap:4px;white-space:nowrap}
@@ -125,7 +142,7 @@ button:focus-visible,input:focus-visible{outline:3px solid var(--gold);outline-o
 .tag.bad{background:var(--cinnabar-dark);color:var(--paper)}
 .tag.soft{background:rgba(59,36,18,.18);color:var(--mat-ink)}
 
-.bubble{position:absolute;z-index:6;background:var(--paper);color:var(--mat-ink);font-weight:700;font-size:13px;padding:6px 11px;border-radius:14px;white-space:nowrap;box-shadow:0 4px 12px var(--shadow);opacity:0;transform:scale(.5);transition:opacity .2s, transform .25s cubic-bezier(.3,1.6,.5,1);pointer-events:none}
+.bubble{position:absolute;z-index:6;background:var(--paper);color:var(--mat-ink);font-weight:700;font-size:13px;line-height:1.3;padding:6px 11px;border-radius:14px;width:max-content;max-width:190px;white-space:normal;overflow-wrap:anywhere;box-shadow:0 4px 12px var(--shadow);opacity:0;transform:scale(.5);transition:opacity .2s, transform .25s cubic-bezier(.3,1.6,.5,1);pointer-events:none}
 .bubble.show{opacity:1;transform:scale(1)}
 .seat[data-v="2"] .bubble,.seat[data-v="3"] .bubble{left:calc(100% + 10px);top:6px;transform-origin:left center}
 .seat[data-v="1"] .bubble{right:calc(100% + 10px);top:6px;transform-origin:right center}
@@ -155,7 +172,7 @@ button:focus-visible,input:focus-visible{outline:3px solid var(--gold);outline-o
 .card{
   --cw:70px;
   width:var(--cw);height:calc(var(--cw) * 1.4);flex:none;position:relative;
-  border-radius:calc(var(--cw) * .1);background:var(--paper);border:1px solid var(--paper-edge);
+  border-radius:calc(var(--cw) * .1);background:linear-gradient(165deg, #fffefa 0%, var(--paper) 55%, #f5ead4 100%);border:1px solid var(--paper-edge);
   box-shadow:0 2px 4px rgba(0,0,0,.22),-2px 0 6px rgba(0,0,0,.1);
   color:var(--ink-black);font-family:var(--font-display);font-size:calc(var(--cw) * .3);
   user-select:none;-webkit-user-select:none;padding:0;text-align:left;
@@ -192,9 +209,29 @@ button:focus-visible,input:focus-visible{outline:3px solid var(--gold);outline-o
 .btn-ghost:hover:not(:disabled){color:var(--gold-soft);border-color:var(--gold)}
 .btn-gold{background:var(--gold);color:var(--lacquer);box-shadow:0 4px 0 #8a5d12}
 
-.quick{position:absolute;left:0;right:0;bottom:calc(100% + 6px);z-index:30;display:flex;flex-wrap:wrap;gap:6px;justify-content:center;padding:10px;background:var(--lacquer-2);border:1px solid var(--gold);border-radius:16px;box-shadow:0 10px 30px rgba(0,0,0,.5)}
-.quick button{border:1px solid var(--lacquer-3);background:var(--lacquer);color:var(--text);border-radius:999px;padding:7px 12px;font-weight:600;font-size:13px;cursor:pointer}
-.quick button:hover{border-color:var(--gold);color:var(--gold-soft)}
+/* Chat */
+.chat-fab{position:absolute;left:26px;top:22px;z-index:4;width:42px;height:42px;border-radius:50%;border:none;cursor:pointer;font-size:20px;line-height:1;
+  background:var(--lacquer-2);box-shadow:0 0 0 2px var(--gold),0 4px 10px var(--shadow);display:grid;place-items:center}
+.chat-fab:hover{background:var(--lacquer-3)}
+.unread{position:absolute;right:-5px;top:-5px;min-width:20px;height:20px;padding:0 5px;border-radius:10px;background:var(--cinnabar);color:var(--paper);font-size:11px;font-weight:800;font-family:var(--font-body);display:grid;place-items:center;box-shadow:0 0 0 2px var(--lacquer-2)}
+.chat{position:absolute;right:max(12px, env(safe-area-inset-right, 0px));bottom:12px;z-index:40;width:min(340px, calc(100% - 24px));height:min(440px, calc(100% - 24px));
+  display:flex;flex-direction:column;background:var(--lacquer-2);border:2px solid var(--gold);border-radius:18px;box-shadow:0 18px 50px rgba(0,0,0,.6);overflow:hidden}
+.chat-head{display:flex;align-items:center;justify-content:space-between;padding:10px 14px;border-bottom:1px solid var(--lacquer-3)}
+.chat-head b{font-family:var(--font-display);font-size:18px;color:var(--gold)}
+.chat-x{background:none;border:none;color:var(--text-dim);font-size:24px;line-height:1;cursor:pointer;padding:0 4px}
+.chat-log{flex:1;min-height:0;overflow-y:auto;list-style:none;margin:0;padding:10px 12px;display:flex;flex-direction:column;gap:6px}
+.chat-log:empty::before{content:"Chưa có tin nhắn. Chào cả bàn một câu đi!";color:var(--text-dim);font-size:13px;margin:auto;text-align:center}
+.msg{max-width:85%;align-self:flex-start;background:var(--lacquer);border-radius:12px 12px 12px 4px;padding:6px 10px;font-size:14px;line-height:1.35;overflow-wrap:anywhere}
+.msg b{display:block;font-size:11px;color:var(--gold-soft);margin-bottom:1px}
+.msg.mine{align-self:flex-end;background:var(--cinnabar-dark);color:var(--paper);border-radius:12px 12px 4px 12px}
+.msg.mine b{display:none}
+.chat-quick{display:flex;gap:6px;overflow-x:auto;padding:8px 12px 0;scrollbar-width:none}
+.chat-quick::-webkit-scrollbar{display:none}
+.chat-quick button{flex:none;border:1px solid var(--lacquer-3);background:var(--lacquer);color:var(--text);border-radius:999px;padding:6px 11px;font-weight:600;font-size:13px;cursor:pointer;white-space:nowrap}
+.chat-quick button:hover{border-color:var(--gold);color:var(--gold-soft)}
+.chat-form{display:flex;gap:8px;padding:10px 12px 12px}
+.chat-form input{flex:1;min-width:0;background:var(--lacquer);border:1px solid var(--lacquer-3);border-radius:12px;padding:10px 12px;font-size:16px}
+.chat-form .btn{font-size:15px;padding:10px 16px;min-width:0;flex:none}
 
 /* Banner + toast */
 .banner{position:absolute;left:50%;top:44%;transform:translate(-50%,-50%);z-index:20;pointer-events:none;text-align:center;opacity:0;width:max-content;max-width:92%}
@@ -267,7 +304,7 @@ kbd{font-family:var(--font-body);font-size:12px;background:var(--lacquer);border
   .chip-btn{padding:5px 9px;font-size:12px}
   .chip-btn .lg{display:none}
   .tools{gap:4px}
-  .mat{padding:22px 14px;border-radius:22px;grid-template-columns:minmax(0,1fr) minmax(0,2.2fr) minmax(0,1fr)}
+  .mat{padding:22px 14px;border-radius:22px;margin:8px 10px;grid-template-columns:minmax(0,1fr) minmax(0,2.2fr) minmax(0,1fr)}
   .mat::before{inset:24px}
   .room-badge{right:22px;bottom:20px}
   .avatar{width:44px;height:44px;font-size:24px}
@@ -303,7 +340,10 @@ kbd{font-family:var(--font-body);font-size:12px;background:var(--lacquer);border
   .seat[data-v="0"]{justify-content:flex-start;gap:8px;padding-left:4px}
   .pile-cards{height:calc(var(--pcw, 56px) * 1.4 + 10px)}
   .mat::before{inset:17px;border-radius:10px}
-  .avatar{width:36px;height:36px;font-size:20px;box-shadow:0 0 0 2px var(--cinnabar-dark),0 3px 8px var(--shadow)}
+  .avatar{width:36px;height:36px;font-size:20px;box-shadow:0 0 0 2px var(--gold),0 0 0 4px var(--cinnabar-dark),0 3px 8px var(--shadow)}
+  .meta{padding:2px 8px 3px;border-radius:9px}
+  .mat{margin:6px 8px;box-shadow:inset 0 0 0 5px var(--mat-deep), inset 0 0 0 8px var(--cinnabar), inset 0 0 0 10px var(--mat), inset 0 0 0 12px var(--jade), inset 0 0 0 13px var(--mat-deep), inset 0 0 50px rgba(90,50,10,.35), 0 0 0 3px var(--wood), 0 0 0 4px var(--gold), 0 0 0 7px var(--wood-dark), 0 12px 30px rgba(0,0,0,.6)}
+  .mat::after{height:70%}
   .seat{gap:2px}
   .seat[data-v="2"]{flex-direction:row;gap:8px}
   .seat[data-v="2"] .meta{align-items:flex-start}
@@ -328,8 +368,8 @@ kbd{font-family:var(--font-body);font-size:12px;background:var(--lacquer);border
   .btn-play,.btn-pass{grid-column:1 / -1;min-width:0}
   .btn-play{flex-direction:column;gap:1px;padding-block:8px}
   .btn-play small{font-size:10px}
-  #btnChat{display:none}
-  .quick{left:auto;right:0;width:min(420px,100%)}
+  .chat-fab{left:18px;top:14px;width:34px;height:34px;font-size:16px}
+  .chat{width:min(320px, 48%);height:calc(100% - 16px);bottom:8px}
 }
 /* Phone held upright: turn the whole stage sideways (top of the table toward the right edge of the phone). */
 @media (orientation:portrait) and (max-width:600px) and (pointer:coarse){
@@ -375,16 +415,15 @@ kbd{font-family:var(--font-body);font-size:12px;background:var(--lacquer);border
     </div>
     <section class="seat" data-v="0"></section>
     <button class="room-badge" id="roomBadge" type="button" hidden></button>
+    <button class="chat-fab" id="btnChat" type="button" aria-label="Trò chuyện" hidden>💬<span class="unread" id="chatUnread" hidden></span></button>
     <div class="banner" id="banner"><div class="b-title"></div><div class="b-sub"></div></div>
     <div class="toast" id="toast"></div>
   </main>
 
   <footer class="handzone">
-    <div class="quick" id="quick" hidden></div>
     <div class="status" id="status"></div>
     <div class="hand" id="hand"></div>
     <div class="actions">
-      <button id="btnChat" class="btn btn-ghost" type="button" aria-label="Nói nhanh">💬</button>
       <button id="btnHint" class="btn btn-ghost" type="button">Gợi ý</button>
       <button id="btnSort" class="btn btn-ghost" type="button">Xếp số</button>
       <button id="btnPass" class="btn btn-pass" type="button">Bỏ lượt</button>
@@ -497,6 +536,16 @@ kbd{font-family:var(--font-body);font-size:12px;background:var(--lacquer);border
   </div>
 </div>
 
+<section class="chat" id="chatPanel" hidden aria-label="Trò chuyện">
+  <div class="chat-head"><b>Trò chuyện</b><button class="chat-x" id="btnChatClose" type="button" aria-label="Đóng">×</button></div>
+  <ol class="chat-log" id="chatLog"></ol>
+  <div class="chat-quick" id="quick"></div>
+  <form class="chat-form" id="chatForm">
+    <input id="chatInput" maxlength="100" autocomplete="off" enterkeyhint="send" placeholder="Nhắn gì đó cho cả bàn..." aria-label="Tin nhắn">
+    <button class="btn btn-play" type="submit">Gửi</button>
+  </form>
+</section>
+
 <canvas id="confetti" hidden></canvas>
 </div><!-- #stage -->
 
@@ -536,6 +585,7 @@ const pick = a => a[Math.floor(Math.random() * a.length)];
 const $ = s => document.querySelector(s);
 const fmt = n => n.toLocaleString('vi-VN');
 const esc = s => String(s).replace(/[&<>"']/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
+const cleanChat = t => String(t || '').replace(/\s+/g, ' ').trim().slice(0, 100);
 const cleanName = n => String(n || '').replace(/[<>]/g, '').replace(/\s+/g, ' ').trim().slice(0, 14) || 'Khách';
 
 // ================= Storage (this browser only) =================
@@ -973,6 +1023,7 @@ function applyFx(type, a){
   try {
     switch (type){
       case 'say': say(a[0], a[1]); break;
+      case 'chat': addChat(a[0], a[1]); break;
       case 'float': floatChip(a[0], a[1]); break;
       case 'banner': banner(a[0], a[1]); break;
       case 'first': {
@@ -1139,8 +1190,8 @@ function onGuestMsg(conn, m){
       else send(conn, { t:'state', v:makeView(p) });
       break;
     case 'chat': {
-      const now = Date.now();
-      if (QUICK[m.i] && now - (conn.lastChat || 0) > 1200){ conn.lastChat = now; fx('say', p, QUICK[m.i]); }
+      const now = Date.now(), text = typeof m.text === 'string' ? cleanChat(m.text) : (QUICK[m.i] || '');
+      if (text && now - (conn.lastChat || 0) > 700){ conn.lastChat = now; fx('chat', p, text); }
       break;
     }
     case 'sync':
@@ -1459,6 +1510,7 @@ function renderActions(){
   $('#btnPass').disabled = !canPass;
   $('#btnHint').disabled = !myTurn;
   $('#btnChat').hidden = MODE === 'solo';
+  if (MODE === 'solo' && !$('#chatPanel').hidden) openChat(false);
   const moves = myTurn ? humanMoves() : [];
   $('#btnPass').classList.toggle('nudge', canPass && !moves.length);
   if (myTurn && lastTurnSound !== V.turnKey){ lastTurnSound = V.turnKey; SFX.turn(); }
@@ -1564,10 +1616,10 @@ function showMsg(title, text, actions = [], spin = false){
   $('#msgModal').hidden = false;
 }
 const hideMsg = () => { $('#msgModal').hidden = true; };
-function say(p, text){
+function say(p, text, ms = 1800){
   const el = seatEls[vi(p)]; const b = el && el.querySelector('.bubble'); if (!b) return;
   b.textContent = text; b.classList.add('show');
-  clearTimeout(b._t); b._t = setTimeout(() => b.classList.remove('show'), 1800);
+  clearTimeout(b._t); b._t = setTimeout(() => b.classList.remove('show'), ms);
 }
 function floatChip(p, amt){
   const el = seatEls[vi(p)]; const f = el && el.querySelector('.floats'); if (!f) return;
@@ -1644,6 +1696,7 @@ const SFX = {
   lose(){ [392,349,311,262].forEach((f,i) => tone(f, .32, { vol:.07, at:i*.16 })); },
   deal(){ for (let i = 0; i < 10; i++) noise(.05, { vol:.3, freq:3200, at:i*.055 }); },
   tick(){ tone(1050, .05, { type:'square', vol:.035 }); },
+  pop(){ tone(740, .07, { type:'sine', vol:.06 }); tone(990, .09, { type:'sine', vol:.05, at:.06 }); },
 };
 
 // ================= Player actions =================
@@ -1655,11 +1708,39 @@ function doPass(){
   if (MODE === 'guest'){ send(NET.host, { t:'pass' }); V.waiting = true; renderActions(); }
   else if (canPassNow(mySeat)) pass(mySeat);
 }
-let lastChat = 0;
-function doChat(i){
-  const now = Date.now(); if (now - lastChat < 1200) return; lastChat = now;
-  if (MODE === 'guest') send(NET.host, { t:'chat', i });
-  else fx('say', mySeat, QUICK[i]);
+// ---- Chat (online rooms) ----
+let lastChat = 0, unread = 0;
+const chatLog = [];
+function sendChat(text){
+  text = cleanChat(text);
+  if (!text) return false;
+  const now = Date.now(); if (now - lastChat < 700) return false; lastChat = now;
+  if (MODE === 'guest') send(NET.host, { t:'chat', text });
+  else fx('chat', mySeat, text);
+  return true;
+}
+function addChat(p, text){
+  const name = V && V.seats[p] ? V.seats[p].name : '';
+  chatLog.push({ p, name, text }); if (chatLog.length > 60) chatLog.shift();
+  say(p, text.length > 60 ? text.slice(0, 58) + '…' : text, Math.min(5000, 1800 + text.length * 70));
+  if (p !== mySeat){
+    if ($('#chatPanel').hidden) unread++;
+    SFX.pop();
+  }
+  renderChat();
+}
+function renderChat(){
+  const badge = $('#chatUnread');
+  badge.hidden = !unread; badge.textContent = unread > 9 ? '9+' : unread;
+  const log = $('#chatLog');
+  if ($('#chatPanel').hidden) return;
+  log.innerHTML = chatLog.map(m => `<li class="msg ${m.p === mySeat ? 'mine' : ''}"><b>${esc(m.name)}</b>${esc(m.text)}</li>`).join('');
+  log.scrollTop = log.scrollHeight;
+}
+function openChat(open){
+  $('#chatPanel').hidden = !open;
+  if (open){ unread = 0; renderChat(); }
+  else renderChat();
 }
 function askName(kind, code){
   const m = $('#nameModal');
@@ -1710,12 +1791,18 @@ function bind(){
     $('#btnSort').textContent = sortMode === 'rank' ? 'Xếp số' : 'Xếp chất';
     renderHand();
   });
-  // quick chat
+  // chat
   $('#quick').innerHTML = QUICK.map((q, i) => `<button type="button" data-i="${i}">${q}</button>`).join('');
-  $('#btnChat').addEventListener('click', () => { $('#quick').hidden = !$('#quick').hidden; });
+  $('#btnChat').addEventListener('click', () => openChat($('#chatPanel').hidden));
+  $('#btnChatClose').addEventListener('click', () => openChat(false));
   $('#quick').addEventListener('click', e => {
     const b = e.target.closest('button'); if (!b) return;
-    doChat(+b.dataset.i); $('#quick').hidden = true;
+    sendChat(QUICK[+b.dataset.i]);
+  });
+  $('#chatForm').addEventListener('submit', e => {
+    e.preventDefault();
+    const inp = $('#chatInput');
+    if (sendChat(inp.value)) inp.value = '';
   });
   // header
   $('#btnNew').addEventListener('click', () => {
@@ -1784,9 +1871,21 @@ function bind(){
     }
     if (e.target.tagName === 'INPUT') return;
     if (e.key === 'Enter' && !$('#btnPlay').disabled){ e.preventDefault(); $('#btnPlay').click(); }
-    if (e.key === 'Escape'){ sel.clear(); hintIdx = -1; $('#quick').hidden = true; renderHand(); renderActions(); }
+    if (e.key === 'Escape'){ sel.clear(); hintIdx = -1; openChat(false); renderHand(); renderActions(); }
   });
   document.addEventListener('pointerdown', () => { if (settings.sound) audio(); }, { once:true });
+  // iPhone Safari still zooms on pinch / quick double taps despite the viewport tag: block both.
+  ['gesturestart', 'gesturechange', 'dblclick'].forEach(t => document.addEventListener(t, e => e.preventDefault(), { passive:false }));
+  let lastTouch = 0;
+  document.addEventListener('touchend', e => {
+    const now = Date.now();
+    // A second tap within 350ms is where Safari would zoom: stop that, but still deliver the tap as a click.
+    if (now - lastTouch < 350 && e.target instanceof Element && !e.target.closest('input, textarea')){
+      e.preventDefault();
+      e.target.click();
+    }
+    lastTouch = now;
+  }, { passive:false });
   let rt; window.addEventListener('resize', () => { clearTimeout(rt); rt = setTimeout(() => { lastPileId = -1; if (V){ renderPile(); renderHand(); } }, 120); });
   window.addEventListener('beforeunload', e => {
     if (MODE === 'host' && NET.seatConn.some(Boolean) && !NET.leaving){ e.preventDefault(); e.returnValue = ''; }
