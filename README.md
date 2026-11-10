@@ -25,6 +25,7 @@ Một vài điều nên biết:
 - **Chủ phòng nên giữ trang game mở trên màn hình.** Ván bài chạy trên máy của chủ phòng. Chủ phòng chuyển sang Zalo hay khóa màn hình một lúc thì mọi người phải chờ. Khi chủ phòng quay lại, game tự chạy tiếp. Ai vào phòng trong lúc đó cũng sẽ tự được nhận khi chủ phòng quay lại.
 - Trong phòng, game giữ cho màn hình điện thoại không tự tắt (nếu trình duyệt hỗ trợ).
 - Phòng tối đa 4 người. Ai vào giữa ván thì ngồi xem, chơi từ ván sau.
+- Cầm điện thoại dọc thì game tự quay bàn chơi nằm ngang, và dùng bàn phím riêng cũng nằm ngang. Bàn phím này gõ Telex tiếng Việt (`aa`→â, `dd`→đ, `s f r x j` là dấu sắc, huyền, hỏi, ngã, nặng), bấm **VN/EN** để bật tắt.
 - Bấm nút **💬** ở góc trên bên trái bàn để trò chuyện: gõ chữ hoặc bấm câu nói nhanh. Tin nhắn hiện thành bóng thoại trên đầu người nói, có số tin chưa đọc khi khung chat đang đóng.
 - Mỗi lượt có **15 giây**, số giây hiện ngay trên ảnh đại diện. Hết giờ mà chưa đánh thì tự bỏ lượt. Nếu đang tới lượt ra bài đầu vòng thì tự đánh lá nhỏ nhất.
 - Ai rớt mạng thì máy đánh hộ tới hết ván. Mở lại đúng link đó trên cùng trình duyệt là ngồi lại ghế cũ.

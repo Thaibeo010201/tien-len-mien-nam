@@ -25,7 +25,7 @@
   --paper:#fffaf0; --paper-edge:#e4d5b8; --ink-black:#1b1b22; --ink-red:#c42a22;
   --text:#f6e9d6; --text-dim:#c4a88c;
   --shadow:rgba(0,0,0,.35);
-  --wood:#5a2a17; --wood-dark:#2a120c;
+  --wood:#5a2a17; --wood-dark:#2a120c; --kb-bg:#160805;
   --font-display:'Baloo 2','Be Vietnam Pro',system-ui,sans-serif;
   --font-body:'Be Vietnam Pro',system-ui,-apple-system,'Segoe UI',sans-serif;
   color-scheme:dark;
@@ -232,6 +232,21 @@ button:focus-visible,input:focus-visible{outline:3px solid var(--gold);outline-o
 .chat-form{display:flex;gap:8px;padding:10px 12px 12px}
 .chat-form input{flex:1;min-width:0;background:var(--lacquer);border:1px solid var(--lacquer-3);border-radius:12px;padding:10px 12px;font-size:16px}
 .chat-form .btn{font-size:15px;padding:10px 16px;min-width:0;flex:none}
+/* Built-in keyboard: only used while the table is turned on an upright phone */
+.kb{position:absolute;left:0;right:0;bottom:0;z-index:80;display:flex;flex-direction:column;gap:5px;
+  padding:7px max(8px, env(safe-area-inset-top, 0px)) 8px max(8px, env(safe-area-inset-bottom, 0px));
+  background:var(--kb-bg);border-top:1px solid var(--lacquer-3);box-shadow:0 -8px 24px rgba(0,0,0,.5);touch-action:none;user-select:none;-webkit-user-select:none}
+.kb-row{display:flex;gap:5px;justify-content:center}
+.kb button{flex:1 1 0;max-width:62px;height:34px;border:none;border-radius:7px;background:var(--lacquer-3);color:var(--text);font:600 16px var(--font-body);box-shadow:0 2px 0 rgba(0,0,0,.45);cursor:pointer;padding:0}
+.kb button.wide{flex:1.5 1 0;max-width:92px;font-size:14px}
+.kb button.space{flex:5 1 0;max-width:none;font-size:12px;color:var(--text-dim)}
+.kb button.mod{background:var(--lacquer-2);color:var(--gold-soft)}
+.kb button.on{background:var(--gold);color:var(--lacquer)}
+.kb button.go{background:var(--cinnabar);color:var(--paper)}
+.kb button:active{filter:brightness(1.35);transform:translateY(1px)}
+.kb button.kb-hide{position:absolute;right:max(10px, env(safe-area-inset-bottom, 0px));top:-26px;width:46px;height:26px;flex:none;max-width:none;border-radius:8px 8px 0 0;background:var(--kb-bg);color:var(--gold-soft);box-shadow:none}
+#stage.kb-open .chat{bottom:calc(var(--kbh, 0px) + 6px);height:calc(100% - var(--kbh, 0px) - 14px)}
+#stage.kb-open .modal{place-items:start center;padding-top:8px;padding-bottom:calc(var(--kbh, 0px) + 8px)}
 
 /* Banner + toast */
 .banner{position:absolute;left:50%;top:44%;transform:translate(-50%,-50%);z-index:20;pointer-events:none;text-align:center;opacity:0;width:max-content;max-width:92%}
@@ -546,6 +561,8 @@ kbd{font-family:var(--font-body);font-size:12px;background:var(--lacquer);border
   </form>
 </section>
 
+<div class="kb" id="kb" hidden></div>
+
 <canvas id="confetti" hidden></canvas>
 </div><!-- #stage -->
 
@@ -780,7 +797,7 @@ function save(){
   store.set('lastWinner', S.lastWinner); store.set('gameNo', S.gameNo);
 }
 const active = p => S.inGame[p] && !S.finished.includes(p) && !S.cong.includes(p);
-const humanCount = () => S.seats.filter(s => s.type === 'human' && (s.local || s.connected)).length;
+const humanCount = () => S.seats.filter(s => s.type === 'human').length;
 function nextActive(p){ for (let i = 1; i <= 4; i++){ const q = (p + i) % 4; if (active(q)) return q; } return -1; }
 function later(fn, ms){ clearTimeout(timer); timer = setTimeout(fn, ms); }
 const who = p => S.seats[p].name;
@@ -796,8 +813,10 @@ function newGame(){
   if (MODE === 'guest') return;
   clearTimeout(timer);
   if (MODE === 'host'){
-    // Online rooms are people only: drop anyone who left, and need at least 2 players.
-    S.seats = S.seats.map(s => (s.type !== 'human' || (!s.local && !s.connected)) ? emptySeat() : s);
+    // Online rooms are people only. Someone who just stepped away (locked screen, Zalo...) keeps their seat and
+    // the machine plays for them until they're back; only a seat left empty for over 3 minutes is freed.
+    const now = Date.now();
+    S.seats = S.seats.map(s => (s.type !== 'human' || (!s.local && !s.connected && now - (s.offlineSince || 0) > 180000)) ? emptySeat() : s);
     NET.seatConn = NET.seatConn.map((c, i) => S.seats[i].type === 'human' ? c : null);
     if (humanCount() < 2){
       S.phase = 'lobby'; S.over = true; S.waiting = true; S.current = -1; S.table = null; S.prevTable = null;
@@ -1045,6 +1064,8 @@ function applyFx(type, a){
 // so players on 4G/CGNAT can still reach each other. The host's browser still runs the game.
 const BROKERS = ['wss://broker.emqx.io:8084/mqtt', 'wss://broker.hivemq.com:8884/mqtt', 'wss://test.mosquitto.org:8081/mqtt'];
 const TOPIC = 'tlmn-chieuhoa/v2/';
+// Bump on every release: a guest whose browser still runs an older cached copy is asked to reload.
+const APP_VER = 9;
 const NET = { client:null, room:null, broker:0, seatConn:[null,null,null,null], conns:[], host:null, gid:null,
   lastHost:0, beat:null, helloT:null, leaving:false, welcomed:false, unknown:{} };
 const hasMqtt = () => !!(window.mqtt && typeof window.mqtt.connect === 'function');
@@ -1159,8 +1180,8 @@ function markOffline(p, closed){
     S.seats[p] = emptySeat();
     fx('toast', `${s.name} đã rời phòng`);
   } else if (s.connected){
-    s.connected = false;
-    fx('toast', `${s.name} mất kết nối, máy đánh hộ`);
+    s.connected = false; s.offlineSince = Date.now();
+    fx('toast', S.over ? `${s.name} đang tạm vắng` : `${s.name} mất kết nối, máy đánh hộ`);
     if (!S.over && !S.waiting && S.current === p) later(() => botAct(p), 900);
   }
   publish();
@@ -1217,7 +1238,8 @@ function hello(conn, m){
     fx('sfx', 'turn');
   }
   NET.seatConn[p] = conn; conn.seat = p;
-  send(conn, { t:'welcome', seat:p, room:NET.room });
+  send(conn, { t:'welcome', seat:p, room:NET.room, ver:APP_VER });
+  if (+m.ver > APP_VER) toast('Máy bạn đang chạy bản game cũ hơn. Hết ván thì đóng phòng, tải lại trang nhé.');
   if (!S.over && S.phase === 'play' && !S.waiting && S.current === p) startTurn();
   else publish();
 }
@@ -1245,7 +1267,7 @@ function joinRoom(code, name, bi = 0){
   const client = connectBroker(bi, NET.gid, true);
   NET.client = client;
   NET.host = { open:true, send(msg){ client.publish(TOPIC + code + '/h', JSON.stringify({ ...msg, from:NET.gid }), { qos:1 }); } };
-  const sayHello = () => send(NET.host, { t:'hello', name:profile.name || name, avatar:profile.avatar, token:profile.token });
+  const sayHello = () => send(NET.host, { t:'hello', name:profile.name || name, avatar:profile.avatar, token:profile.token, ver:APP_VER });
   const failT = setTimeout(() => { if (!connected) fail('Chưa vào được phòng', NET_BLOCKED); }, 12000);
   client.on('connect', () => {
     if (NET.client !== client || failed) return;
@@ -1285,6 +1307,12 @@ function onHostMsg(m){
     case 'welcome':
       mySeat = m.seat; NET.welcomed = true; clearTimeout(NET.helloT);
       if (!$('#msgModal').hidden) hideMsg();
+      if (+m.ver > APP_VER){
+        // our browser served an old cached copy: reload with a fresh URL to get the new one, then rejoin the same seat
+        const fresh = location.pathname + '?phong=' + NET.room + (NET.broker ? '&s=' + NET.broker : '') + '&v=' + Date.now();
+        showMsg('Có bản game mới', 'Máy bạn đang chạy bản cũ hơn chủ phòng. Tải lại để chơi cho đồng bộ, bạn vẫn giữ nguyên ghế.', [
+          { label:'Để sau', act:hideMsg }, { label:'Tải lại', primary:true, act:() => { location.href = fresh; } }]);
+      }
       break;
     case 'state':
       if (!m.v) return;
@@ -1295,7 +1323,7 @@ function onHostMsg(m){
       break;
     case 'fx': applyFx(m.type, m.a || []); break;
     case 'err': toast(m.msg); break;
-    case 'rejoin': send(NET.host, { t:'hello', name:profile.name, avatar:profile.avatar, token:profile.token }); break;
+    case 'rejoin': send(NET.host, { t:'hello', name:profile.name, avatar:profile.avatar, token:profile.token, ver:APP_VER }); break;
     case 'full': NET.leaving = true; showMsg('Phòng đã đủ 4 người', 'Đợi có người rời phòng rồi vào lại, hoặc chơi một mình với máy.', [{ label:'Chơi một mình', primary:true, act:goSolo }]); break;
     case 'closed': NET.leaving = true; showMsg('Chủ phòng đã đóng phòng', 'Ván chơi đã kết thúc.', [{ label:'Chơi một mình', primary:true, act:goSolo }]); break;
   }
@@ -1596,7 +1624,7 @@ function fillRoom(){
   $('#btnStart').hidden = !(MODE === 'host' && lobby);
   $('#btnRoomClose').hidden = lobby;
   $('#btnLeave').textContent = MODE === 'host' ? 'Đóng phòng' : 'Rời phòng';
-  const humans = V.seats.filter(s => s.type === 'human' && s.online).length;
+  const humans = V.seats.filter(s => s.type === 'human').length;
   $('#btnStart').disabled = humans < 2;
   $('#roomNote').textContent = lobby && MODE !== 'host' ? 'Chờ chủ phòng chia bài...'
     : lobby ? (humans < 2 ? 'Cần thêm ít nhất 1 người' : `${humans}/4 người, chia bài được rồi`) : '';
@@ -1738,6 +1766,7 @@ function renderChat(){
   log.scrollTop = log.scrollHeight;
 }
 function openChat(open){
+  if (!open && KB.target === $('#chatInput')){ $('#chatInput').blur(); kbHide(); }
   $('#chatPanel').hidden = !open;
   if (open){ unread = 0; renderChat(); }
   else renderChat();
@@ -1755,7 +1784,7 @@ function askName(kind, code){
   pickEl.innerHTML = AVATARS.map(a => `<button type="button" data-a="${a}" aria-pressed="${a === profile.avatar}" aria-label="Chọn ${a}">${a}</button>`).join('');
   m.dataset.kind = kind; m.dataset.code = code || '';
   m.hidden = false;
-  setTimeout(() => $('#nameInput').focus(), 50);
+  setTimeout(() => { $('#nameInput').focus(); if (turnedStage()) kbShow($('#nameInput')); }, 50);
 }
 
 function bind(){
@@ -1890,10 +1919,6 @@ function bind(){
   window.addEventListener('beforeunload', e => {
     if (MODE === 'host' && NET.seatConn.some(Boolean) && !NET.leaving){ e.preventDefault(); e.returnValue = ''; }
   });
-  window.addEventListener('pagehide', () => {
-    if (MODE === 'host') NET.conns.forEach(c => send(c, { t:'closed' }));
-    else if (MODE === 'guest' && NET.host && !NET.leaving) send(NET.host, { t:'bye' });
-  });
   document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') onVisible(); });
 }
 
@@ -1936,6 +1961,180 @@ if (code){
 } else {
   MODE = 'solo'; S = soloState(); newGame();
 }
+
+// ---- Vietnamese Telex for the built-in keyboard ----
+const TONED = { a:'aáàảãạ', ă:'ăắằẳẵặ', â:'âấầẩẫậ', e:'eéèẻẽẹ', ê:'êếềểễệ', i:'iíìỉĩị', o:'oóòỏõọ', ô:'ôốồổỗộ', ơ:'ơớờởỡợ', u:'uúùủũụ', ư:'ưứừửữự', y:'yýỳỷỹỵ' };
+const TONE_KEY = { s:1, f:2, r:3, x:4, j:5 };
+const DECOMP = {};
+for (const [b, row] of Object.entries(TONED)) [...row].forEach((ch, t) => { DECOMP[ch] = [b, t]; DECOMP[ch.toUpperCase()] = [b.toUpperCase(), t]; });
+const isV = ch => !!DECOMP[ch];
+const baseOf = ch => DECOMP[ch][0];
+const toneOf = ch => DECOMP[ch][1];
+function comp(base, tone){
+  const lower = base.toLowerCase(), row = TONED[lower];
+  if (!row) return base;
+  return base === lower ? row[tone] : row[tone].toUpperCase();
+}
+// Which vowel of the word carries the tone mark.
+function toneIndex(chars){
+  const idx = [];
+  chars.forEach((c, i) => { if (isV(c)) idx.push(i); });
+  if (idx.length > 1){
+    const f = idx[0], prev = (chars[f - 1] || '').toLowerCase(), b = baseOf(chars[f]).toLowerCase();
+    if ((prev === 'q' && b === 'u') || (prev === 'g' && b === 'i')) idx.shift(); // qu-, gi- are consonants
+  }
+  if (!idx.length) return -1;
+  const marked = idx.filter(i => 'ăâêôơư'.includes(baseOf(chars[i]).toLowerCase()));
+  if (marked.length) return marked[marked.length - 1];
+  if (idx.length === 1) return idx[0];
+  const last = idx[idx.length - 1];
+  if (last < chars.length - 1) return last;          // vowels followed by a consonant: last vowel
+  if (idx.length >= 3) return idx[1];
+  const pair = idx.map(i => baseOf(chars[i]).toLowerCase()).join('');
+  return ['oa', 'oe', 'uy'].includes(pair) ? idx[1] : idx[0];
+}
+// Put the word's tone (if any) back on the right vowel.
+function normalize(chars){
+  let tone = 0;
+  chars.forEach((c, i) => { if (isV(c) && toneOf(c)){ tone = toneOf(c); chars[i] = baseOf(c); } });
+  if (tone){ const t = toneIndex(chars); if (t >= 0) chars[t] = comp(chars[t], tone); }
+  return chars;
+}
+// Returns the new word after typing `key`, or null to just append the key.
+function telex(word, key){
+  const k = key.toLowerCase();
+  const chars = [...word];
+  const join = arr => normalize(arr).join('');
+  if (k === 'd' && chars.length){
+    if (chars[0] === 'd' || chars[0] === 'D'){ chars[0] = chars[0] === 'd' ? 'đ' : 'Đ'; return chars.join(''); }
+    if (chars[0] === 'đ' || chars[0] === 'Đ'){ chars[0] = chars[0] === 'đ' ? 'd' : 'D'; return chars.join('') + key; }
+  }
+  const vi = []; chars.forEach((c, i) => { if (isV(c)) vi.push(i); });
+  if (k === 'a' || k === 'e' || k === 'o'){
+    const hat = { a:'â', e:'ê', o:'ô' }[k];
+    for (let n = vi.length - 1; n >= 0; n--){
+      const i = vi[n], b = baseOf(chars[i]), bl = b.toLowerCase(), up = b !== bl, t = toneOf(chars[i]);
+      if (bl === k || (k === 'a' && bl === 'ă') || (k === 'o' && bl === 'ơ')){ chars[i] = comp(up ? hat.toUpperCase() : hat, t); return join(chars); }
+      if (bl === hat){ chars[i] = comp(up ? k.toUpperCase() : k, t); return join(chars) + key; }
+    }
+    return null;
+  }
+  if (k === 'w'){
+    // ươ
+    for (let n = vi.length - 2; n >= 0; n--){
+      const a = vi[n], b = vi[n + 1];
+      if (b === a + 1 && baseOf(chars[a]).toLowerCase() === 'u' && 'oô'.includes(baseOf(chars[b]).toLowerCase())){
+        const ua = baseOf(chars[a]) !== 'u', ub = !'oô'.includes(baseOf(chars[b]));
+        chars[a] = comp(ua ? 'Ư' : 'ư', toneOf(chars[a])); chars[b] = comp(ub ? 'Ơ' : 'ơ', toneOf(chars[b]));
+        return join(chars);
+      }
+    }
+    const horn = { a:'ă', â:'ă', o:'ơ', ô:'ơ', u:'ư' };
+    for (let n = vi.length - 1; n >= 0; n--){
+      const i = vi[n], b = baseOf(chars[i]), bl = b.toLowerCase(), up = b !== bl, t = toneOf(chars[i]);
+      if (horn[bl]){ const h = horn[bl]; chars[i] = comp(up ? h.toUpperCase() : h, t); return join(chars); }
+      if ('ăơư'.includes(bl)){ const back = { ă:'a', ơ:'o', ư:'u' }[bl]; chars[i] = comp(up ? back.toUpperCase() : back, t); return join(chars) + key; }
+    }
+    return word + (key === 'W' ? 'Ư' : 'ư');
+  }
+  if (TONE_KEY[k] || k === 'z'){
+    if (!vi.length) return null;
+    const ti = toneIndex(chars), want = TONE_KEY[k] || 0;
+    let cur = 0; vi.forEach(i => { if (toneOf(chars[i])) cur = toneOf(chars[i]); });
+    if (k === 'z' && !cur) return null;
+    if (cur === want && k !== 'z') { normalize(chars); vi.forEach(i => { chars[i] = baseOf(chars[i]); }); return chars.join('') + key; }
+    vi.forEach(i => { chars[i] = baseOf(chars[i]); });
+    if (want && ti >= 0) chars[ti] = comp(chars[ti], want);
+    return chars.join('');
+  }
+  return null;
+}
+function telexType(text, key){
+  const m = text.match(/[\p{L}]*$/u), word = m ? m[0] : '', head = text.slice(0, text.length - word.length);
+  const out = telex(word, key);
+  return head + (out == null ? normalize([...word + key]).join('') : out);
+}
+
+// ---- Built-in landscape keyboard ----
+// When the table is turned with CSS (phone upright), the phone's own keyboard would pop up sideways.
+// So text boxes switch off the system keyboard and this one, drawn on the turned table, types instead.
+const KB_INPUTS = ['#chatInput', '#nameInput'];
+const KB = { target:null, shift:false, nums:false, vn:true };
+const KB_ROWS = {
+  abc: [['q','w','e','r','t','y','u','i','o','p'], ['a','s','d','f','g','h','j','k','l'], ['⇧','z','x','c','v','b','n','m','⌫'], ['123','VN',' ','.','⏎']],
+  num: [['1','2','3','4','5','6','7','8','9','0'], ['-','/',':',';','(',')','!','?','"'], ['😆','👍','😭','🐷','🔥','❤️',',','⌫'], ['abc','VN',' ','.','⏎']],
+};
+function kbRender(){
+  const rows = KB_ROWS[KB.nums ? 'num' : 'abc'];
+  $('#kb').innerHTML = rows.map(r => `<div class="kb-row">${r.map(k => {
+    let label = k, cls = '';
+    if (k === ' '){ label = KB.vn ? 'Telex tiếng Việt' : 'dấu cách'; cls = 'space'; }
+    else if (k === '⏎'){ label = $('#nameModal').hidden ? 'Gửi' : 'Xong'; cls = 'go wide'; }
+    else if (k === '⌫' || k === '⇧' || k === '123' || k === 'abc'){ cls = 'mod wide' + (k === '⇧' && KB.shift ? ' on' : ''); }
+    else if (k === 'VN'){ label = KB.vn ? 'VN' : 'EN'; cls = 'mod' + (KB.vn ? ' on' : ''); }
+    else if (KB.shift) label = k.toUpperCase();
+    return `<button type="button" class="${cls}" data-k="${esc(k)}">${esc(label)}</button>`;
+  }).join('')}</div>`).join('') + '<button type="button" class="kb-hide" data-k="hide" aria-label="Ẩn bàn phím">⌄</button>';
+}
+function kbShow(input){
+  KB.target = input; KB.shift = false;
+  kbRender();
+  $('#kb').hidden = false;
+  $('#stage').classList.add('kb-open');
+  $('#stage').style.setProperty('--kbh', $('#kb').offsetHeight + 'px');
+  const n = input.value.length; try { input.setSelectionRange(n, n); } catch(e){}
+}
+function kbHide(){
+  KB.target = null;
+  $('#kb').hidden = true;
+  $('#stage').classList.remove('kb-open');
+}
+function kbPress(k){
+  const inp = KB.target; if (!inp) return;
+  if (k === 'hide'){ inp.blur(); kbHide(); return; }
+  if (k === '⇧'){ KB.shift = !KB.shift; kbRender(); return; }
+  if (k === '123' || k === 'abc'){ KB.nums = k === '123'; kbRender(); return; }
+  if (k === 'VN'){ KB.vn = !KB.vn; store.set('telex', KB.vn); kbRender(); return; }
+  if (k === '⏎'){
+    const form = inp.form;
+    if (form) form.requestSubmit();
+    if (inp.closest('.modal') && inp.closest('.modal').hidden){ inp.blur(); kbHide(); }
+    return;
+  }
+  let v = inp.value;
+  if (k === '⌫') v = [...v].slice(0, -1).join('');
+  else {
+    const ch = KB.shift ? k.toUpperCase() : k;
+    v = (KB.vn && /^[a-z]$/i.test(ch)) ? telexType(v, ch) : v + ch;
+    if (KB.shift){ KB.shift = false; kbRender(); }
+  }
+  if (inp.maxLength > 0 && [...v].length > inp.maxLength) return;
+  inp.value = v;
+  try { inp.setSelectionRange(v.length, v.length); } catch(e){}
+  SFX.select();
+}
+function kbSync(){
+  const turned = turnedStage();
+  KB_INPUTS.forEach(s => { $(s).inputMode = turned ? 'none' : 'text'; });
+  if (!turned && KB.target){ kbHide(); }
+  else if (turned && document.activeElement && KB_INPUTS.some(s => $(s) === document.activeElement) && !KB.target) kbShow(document.activeElement);
+}
+KB.vn = store.get('telex', true);
+// type on pointerdown and keep the text box focused
+$('#kb').addEventListener('pointerdown', e => {
+  const b = e.target.closest('button[data-k]');
+  e.preventDefault();
+  if (b) kbPress(b.dataset.k);
+});
+document.addEventListener('focusin', e => {
+  if (turnedStage() && KB_INPUTS.some(s => $(s) === e.target)) kbShow(e.target);
+});
+document.addEventListener('focusout', e => {
+  if (KB.target && e.target === KB.target) setTimeout(() => { if (document.activeElement !== KB.target) kbHide(); }, 50);
+});
+window.addEventListener('resize', kbSync);
+KB_INPUTS.forEach(sel => $(sel).addEventListener('click', () => { if (turnedStage() && KB.target !== $(sel)) kbShow($(sel)); }));
+kbSync();
 })();
 </script>
 </body>
