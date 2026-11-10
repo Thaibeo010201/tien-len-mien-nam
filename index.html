@@ -11,8 +11,8 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@600;700;800&family=Be+Vietnam+Pro:wght@400;500;600;700&display=swap">
-<script src="https://cdn.jsdelivr.net/npm/peerjs@1.5.4/dist/peerjs.min.js"></script>
-<script>window.Peer || document.write('<script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"><\/script>');</script>
+<script src="https://cdn.jsdelivr.net/npm/mqtt@5.10.1/dist/mqtt.min.js"></script>
+<script>window.mqtt || document.write('<script src="https://unpkg.com/mqtt@5.10.1/dist/mqtt.min.js"><\/script>');</script>
 <style>
 /* Layout: one-screen card table — a chiếu hoa (woven Tết floor mat) laid on dark lacquer, three seats around the edge, your hand fanned beneath. Single dark theme by design. */
 :root{
@@ -33,6 +33,8 @@
 *{box-sizing:border-box}
 [hidden]{display:none!important}
 html,body{height:100%}
+/* Everything sits on a stage. On a phone held upright the stage is turned 90° so the table is always landscape. */
+#stage{position:fixed;inset:0;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
 body{
   margin:0;
   background:radial-gradient(ellipse at 50% 35%, var(--lacquer-3) 0%, var(--lacquer) 70%), var(--lacquer);
@@ -287,6 +289,55 @@ kbd{font-family:var(--font-body);font-size:12px;background:var(--lacquer);border
   .fan{display:none}
   .mat{padding-block:20px}
 }
+/* Phone held sideways: every pixel of height counts. Hand on the left, buttons in a column on the right. */
+@media (orientation:landscape) and (max-height:520px), (orientation:portrait) and (max-width:600px) and (pointer:coarse){
+  #app{gap:6px;padding-block:6px;max-width:none}
+  .top{flex-wrap:nowrap;gap:8px}
+  .logo{font-size:19px}
+  .sub{display:none}
+  .chip-btn{padding:4px 10px;font-size:12px}
+  .chip-btn .lg{display:none}
+  .tools{gap:4px;flex-wrap:nowrap}
+  .mat{padding:12px 16px;border-radius:18px;gap:2px;grid-template-columns:minmax(0,1fr) minmax(0,3.2fr) minmax(0,1fr);
+    grid-template-areas:". top ." "left pile right" "me pile ."}
+  .seat[data-v="0"]{justify-content:flex-start;gap:8px;padding-left:4px}
+  .pile-cards{height:calc(var(--pcw, 56px) * 1.4 + 10px)}
+  .mat::before{inset:17px;border-radius:10px}
+  .avatar{width:36px;height:36px;font-size:20px;box-shadow:0 0 0 2px var(--cinnabar-dark),0 3px 8px var(--shadow)}
+  .seat{gap:2px}
+  .seat[data-v="2"]{flex-direction:row;gap:8px}
+  .seat[data-v="2"] .meta{align-items:flex-start}
+  .name{font-size:13px}
+  .chips{font-size:11px}
+  .count{min-width:20px;height:20px;font-size:11px;right:-7px;top:-5px}
+  .secs{min-width:22px;height:22px;font-size:12px;left:-9px;top:-7px}
+  .tag{font-size:10px;padding:1px 7px}
+  .fan{display:none}
+  .pile{gap:4px}
+  .pile-label{font-size:12px;padding:2px 10px}
+  .pile-row.prev{transform:translateY(-8px) rotate(-5deg) scale(.84)}
+  .room-badge{right:22px;bottom:14px;font-size:10px;padding:2px 8px}
+  .b-title{font-size:clamp(28px,6vw,48px)}
+  .handzone{display:grid;grid-template-columns:minmax(0,1fr) auto;grid-template-areas:"status actions" "hand actions";gap:2px 10px;align-items:end}
+  .status{grid-area:status;font-size:12px;min-height:16px;text-align:left}
+  .hand{grid-area:hand;padding-top:14px;height:calc(var(--cw, 56px) * 1.4 + 16px)}
+  .hand .card.sel{transform:translateY(-14px)}
+  .actions{grid-area:actions;display:grid;grid-template-columns:auto auto;gap:6px;align-self:end}
+  .btn{font-size:14px;padding:9px 12px}
+  .btn-ghost{font-size:13px}
+  .btn-play,.btn-pass{grid-column:1 / -1;min-width:0}
+  .btn-play{flex-direction:column;gap:1px;padding-block:8px}
+  .btn-play small{font-size:10px}
+  #btnChat{display:none}
+  .quick{left:auto;right:0;width:min(420px,100%)}
+}
+/* Phone held upright: turn the whole stage sideways (top of the table toward the right edge of the phone). */
+@media (orientation:portrait) and (max-width:600px) and (pointer:coarse){
+  #stage{inset:auto;top:0;left:0;width:100vh;width:100dvh;height:100vw;padding:0;
+    transform-origin:top left;transform:rotate(90deg) translateY(-100%)}
+  /* the notch / home bar now sit at the stage's left and right ends */
+  #app{padding-left:max(16px, env(safe-area-inset-top, 0px));padding-right:max(16px, env(safe-area-inset-bottom, 0px))}
+}
 @media (prefers-reduced-motion:reduce){
   *,*::before,*::after{animation-duration:.01ms !important;animation-iteration-count:1 !important;transition-duration:.01ms !important}
   .banner.go{animation:none;opacity:1}
@@ -294,6 +345,7 @@ kbd{font-family:var(--font-body);font-size:12px;background:var(--lacquer);border
 </style>
 </head>
 <body>
+<div id="stage">
 <div id="app">
   <header class="top">
     <div class="brand">
@@ -305,6 +357,7 @@ kbd{font-family:var(--font-body);font-size:12px;background:var(--lacquer);border
       <button id="btnRules" class="chip-btn" type="button">Luật<span class="lg"> chơi</span></button>
       <button id="btnSound" class="chip-btn" type="button">🔊</button>
       <button id="btnSpeed" class="chip-btn" type="button">Vừa</button>
+      <button id="btnFull" class="chip-btn" type="button" hidden aria-label="Toàn màn hình">⛶</button>
       <button id="btnNew" class="chip-btn gold" type="button">Ván mới</button>
     </div>
   </header>
@@ -445,6 +498,7 @@ kbd{font-family:var(--font-body);font-size:12px;background:var(--lacquer);border
 </div>
 
 <canvas id="confetti" hidden></canvas>
+</div><!-- #stage -->
 
 <script>
 (() => {
@@ -477,9 +531,6 @@ const LINES = {
 };
 const QUICK = ['Nhanh lên!','Hehe 😆','Chặt đi nè!','Gà quá 🐔','Run chưa?','Hên thôi','GG 👏','Ván nữa!','Đợi xíu','Huhu 😭'];
 const SPEEDS = [{label:'Nhanh',ms:450},{label:'Vừa',ms:880},{label:'Chậm',ms:1400}];
-// Peer-to-peer settings. Add a TURN server here if some players can't connect (see README).
-const ICE = [{ urls:'stun:stun.l.google.com:19302' }, { urls:'stun:stun1.l.google.com:19302' }];
-const ID_PREFIX = 'tlmn-chieuhoa-v1-';
 
 const pick = a => a[Math.floor(Math.random() * a.length)];
 const $ = s => document.querySelector(s);
@@ -938,74 +989,115 @@ function applyFx(type, a){
   } catch(e){ console.error(e); }
 }
 
-// ================= Networking (PeerJS / WebRTC, no server of our own) =================
-const NET = { peer:null, room:null, seatConn:[null,null,null,null], conns:[], host:null, lastHost:0, beat:null, leaving:false };
-const hasPeer = () => typeof window.Peer === 'function';
-const roomLink = code => location.origin + location.pathname + '?phong=' + code;
+// ================= Networking (MQTT relay over WebSocket, no server of our own) =================
+// Every message goes through a free public MQTT broker instead of a direct phone-to-phone link,
+// so players on 4G/CGNAT can still reach each other. The host's browser still runs the game.
+const BROKERS = ['wss://broker.emqx.io:8084/mqtt', 'wss://broker.hivemq.com:8884/mqtt', 'wss://test.mosquitto.org:8081/mqtt'];
+const TOPIC = 'tlmn-chieuhoa/v2/';
+const NET = { client:null, room:null, broker:0, seatConn:[null,null,null,null], conns:[], host:null, gid:null,
+  lastHost:0, beat:null, helloT:null, leaving:false, welcomed:false, unknown:{} };
+const hasMqtt = () => !!(window.mqtt && typeof window.mqtt.connect === 'function');
+const brokerUrl = i => store.get('broker', null) || BROKERS[i] || BROKERS[0];
+const roomLink = (code, bi) => location.origin + location.pathname + '?phong=' + code + (bi ? '&s=' + bi : '');
 function genCode(){ const A = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789'; return Array.from({length:5}, () => A[Math.floor(Math.random() * A.length)]).join(''); }
 function send(conn, msg){ try { if (conn && conn.open) conn.send(msg); } catch(e){} }
-function errText(err){
-  const t = err && err.type;
-  if (t === 'network' || t === 'server-error' || t === 'socket-error' || t === 'socket-closed') return 'Không kết nối được máy chủ trung gian. Mạng công ty hoặc trường học đôi khi chặn kiểu kết nối này, thử Wi-Fi khác hoặc 4G.';
-  if (t === 'browser-incompatible') return 'Trình duyệt này không hỗ trợ chơi online. Thử Chrome, Safari hoặc Firefox bản mới.';
-  return 'Có lỗi kết nối (' + (t || 'không rõ') + '). Thử lại nhé.';
+const decode = p => typeof p === 'string' ? p : new TextDecoder().decode(p);
+function connectBroker(bi, clientId, clean){
+  return mqtt.connect(brokerUrl(bi), { clientId, clean, protocolVersion:4, keepalive:20, connectTimeout:8000, reconnectPeriod:2000 });
+}
+function libMissing(){
+  showMsg('Không tải được phần kết nối', 'Kiểm tra mạng rồi tải lại trang nhé.', [{ label:'Tải lại', primary:true, act:() => location.reload() }]);
+}
+const NET_BLOCKED = 'Không kết nối được máy chủ trung gian. Mạng công ty hoặc trường học đôi khi chặn kiểu kết nối này, thử Wi-Fi khác hoặc 4G.';
+// Keep the phone screen on while in a room: a locked screen pauses the page.
+let wakeLock = null;
+async function keepAwake(){
+  try {
+    if (MODE !== 'solo' && 'wakeLock' in navigator && document.visibilityState === 'visible' && !wakeLock){
+      wakeLock = await navigator.wakeLock.request('screen');
+      wakeLock.addEventListener('release', () => { wakeLock = null; });
+    }
+  } catch(e){}
 }
 
 // ---- Host ----
-function createRoom(name){
-  if (!hasPeer()) return showMsg('Không tải được phần kết nối', 'Kiểm tra mạng rồi tải lại trang nhé.', [{ label:'Tải lại', primary:true, act:() => location.reload() }]);
+function guestConn(code, id){
+  return { id, seat:-1, lastSeen:Date.now(), open:true,
+    send(msg){ if (NET.client) NET.client.publish(TOPIC + code + '/g/' + id, JSON.stringify(msg), { qos:0 }); },
+    close(){ this.open = false; NET.conns = NET.conns.filter(c => c !== this); } };
+}
+function createRoom(name, bi = 0){
+  if (!hasMqtt()) return libMissing();
   showMsg('Đang tạo phòng...', 'Chờ chút xíu nha.', [], true);
-  if (NET.peer){ try { NET.peer.destroy(); } catch(e){} }
+  if (NET.client){ try { NET.client.end(true); } catch(e){} }
   const code = genCode();
-  const peer = new Peer(ID_PREFIX + code, { config:{ iceServers:ICE } });
-  NET.peer = peer;
+  const client = connectBroker(bi, 'tlmn-h-' + code, false);
+  NET.client = client;
   let ready = false;
   const failT = setTimeout(() => {
-    if (ready || NET.peer !== peer) return;
-    try { peer.destroy(); } catch(e){}
-    showMsg('Không tạo được phòng', 'Không kết nối được máy chủ trung gian. Mạng công ty hoặc trường học đôi khi chặn kiểu kết nối này, thử Wi-Fi khác hoặc 4G.', [{ label:'Chơi một mình', act:hideMsg }, { label:'Thử lại', primary:true, act:() => createRoom(name) }]);
-  }, 15000);
-  peer.on('open', () => {
-    if (NET.peer !== peer) return;
+    if (ready || NET.client !== client) return;
+    try { client.end(true); } catch(e){}
+    if (bi + 1 < BROKERS.length && !store.get('broker', null)) return createRoom(name, bi + 1);
+    NET.client = null;
+    showMsg('Không tạo được phòng', NET_BLOCKED, [{ label:'Chơi một mình', act:hideMsg }, { label:'Thử lại', primary:true, act:() => createRoom(name) }]);
+  }, 9000);
+  client.on('connect', () => {
+    if (NET.client !== client) return;
+    client.subscribe(TOPIC + code + '/h', { qos:1 });
+    if (ready){ wakeGuests(); return; } // reconnected after the phone woke up
     ready = true; clearTimeout(failT);
     clearTimeout(timer);
-    MODE = 'host'; mySeat = 0; NET.room = code;
+    MODE = 'host'; mySeat = 0; NET.room = code; NET.broker = bi;
     S = baseState([{ type:'human', local:true, name, avatar:profile.avatar }, emptySeat(), emptySeat(), emptySeat()], [START,START,START,START]);
     S.phase = 'lobby';
-    try { history.replaceState(null, '', '?phong=' + code); } catch(e){}
+    S.inGame = [false,false,false,false];
+    try { history.replaceState(null, '', roomLink(code, bi).slice(location.origin.length)); } catch(e){}
     hideMsg();
     roomOpen = true;
     publish();
     clearInterval(NET.beat);
     NET.beat = setInterval(hostBeat, 2500);
+    keepAwake();
   });
-  peer.on('connection', conn => {
-    conn.seat = -1; conn.lastSeen = Date.now();
-    NET.conns.push(conn);
-    conn.on('data', m => { conn.lastSeen = Date.now(); onGuestMsg(conn, m); });
-    conn.on('close', () => dropConn(conn));
-    conn.on('error', () => dropConn(conn));
+  client.on('message', (topic, payload) => {
+    if (NET.client !== client || !S) return;
+    let m; try { m = JSON.parse(decode(payload)); } catch(e){ return; }
+    if (!m || typeof m !== 'object' || typeof m.from !== 'string' || m.from.length > 64) return;
+    let conn = NET.conns.find(c => c.id === m.from);
+    if (!conn){
+      if (m.t !== 'hello'){
+        // A browser we don't know (e.g. we dropped it): ask it to introduce itself again.
+        const now = Date.now();
+        if (now - (NET.unknown[m.from] || 0) > 4000){ NET.unknown[m.from] = now; client.publish(TOPIC + code + '/g/' + m.from, JSON.stringify({ t:'rejoin' })); }
+        return;
+      }
+      conn = guestConn(code, m.from);
+      NET.conns.push(conn);
+    }
+    conn.lastSeen = Date.now();
+    if (m.t === 'bye') return dropConn(conn);
+    onGuestMsg(conn, m);
   });
-  peer.on('error', err => {
-    if (NET.peer !== peer) return;
-    if (err.type === 'unavailable-id' && !ready){ clearTimeout(failT); createRoom(name); return; }
-    if (!ready){
-      clearTimeout(failT);
-      NET.peer = null; try { peer.destroy(); } catch(e){}
-      showMsg('Không tạo được phòng', errText(err), [{ label:'Chơi một mình', act:hideMsg }, { label:'Thử lại', primary:true, act:() => createRoom(name) }]);
-    } else console.warn('peer error', err);
-  });
-  peer.on('disconnected', () => { if (NET.peer === peer && ready && !NET.leaving) try { peer.reconnect(); } catch(e){} });
+}
+// After the host's phone was asleep: don't count the pause against the guests, and resend everyone's view.
+function wakeGuests(){
+  if (MODE !== 'host') return;
+  const now = Date.now();
+  NET.conns.forEach(c => { c.lastSeen = now; });
+  publish();
 }
 function hostBeat(){
+  if (document.visibilityState !== 'visible') return;
   const now = Date.now();
   NET.conns.forEach(c => send(c, { t:'ping' }));
   NET.seatConn.forEach((c, p) => {
-    if (c && S.seats[p].type === 'human' && S.seats[p].connected && now - c.lastSeen > 9000) markOffline(p);
+    if (c && S.seats[p].type === 'human' && S.seats[p].connected && now - c.lastSeen > 12000) markOffline(p);
   });
+  // forget browsers that never took a seat
+  NET.conns.filter(c => c.seat < 0 && now - c.lastSeen > 30000).forEach(c => c.close());
 }
 function dropConn(conn){
-  NET.conns = NET.conns.filter(c => c !== conn);
+  conn.close();
   const p = conn.seat;
   if (p >= 0 && NET.seatConn[p] === conn){ NET.seatConn[p] = null; markOffline(p, true); }
 }
@@ -1027,7 +1119,7 @@ function onGuestMsg(conn, m){
   if (m.t === 'hello') return hello(conn, m);
   const p = conn.seat;
   if (p < 0 || NET.seatConn[p] !== conn){
-    // This browser lost its seat (e.g. it was handed to a bot between games): ask it to say hello again.
+    // This browser lost its seat: ask it to say hello again.
     const now = Date.now();
     if (now - (conn.lastRejoin || 0) > 4000){ conn.lastRejoin = now; conn.seat = -1; send(conn, { t:'rejoin' }); }
     return;
@@ -1051,6 +1143,9 @@ function onGuestMsg(conn, m){
       if (QUICK[m.i] && now - (conn.lastChat || 0) > 1200){ conn.lastChat = now; fx('say', p, QUICK[m.i]); }
       break;
     }
+    case 'sync':
+      send(conn, { t:'state', v:makeView(p) });
+      break;
   }
 }
 function hello(conn, m){
@@ -1058,10 +1153,10 @@ function hello(conn, m){
   const token = String(m.token || '').slice(0, 48);
   let p = token ? S.seats.findIndex(s => s.type === 'human' && !s.local && s.token === token) : -1;
   if (p >= 0){
-    const old = NET.seatConn[p];
+    const old = NET.seatConn[p], was = S.seats[p].connected;
     if (old && old !== conn){ old.seat = -1; try { old.close(); } catch(e){} }
     Object.assign(S.seats[p], { connected:true, name, avatar });
-    fx('toast', `${name} đã vào lại`);
+    if (!was || old !== conn) fx('toast', `${name} đã vào lại`);
   } else {
     p = S.seats.findIndex(s => s.type === 'empty');
     if (p < 0){ send(conn, { t:'full' }); setTimeout(() => { try { conn.close(); } catch(e){} }, 800); return; }
@@ -1084,49 +1179,65 @@ function startOnline(){
 }
 
 // ---- Guest ----
-function joinRoom(code, name){
-  if (!hasPeer()) return showMsg('Không tải được phần kết nối', 'Kiểm tra mạng rồi tải lại trang nhé.', [{ label:'Tải lại', primary:true, act:() => location.reload() }]);
-  MODE = 'guest'; NET.room = code;
-  showMsg(`Đang vào phòng ${code}...`, 'Đang kết nối tới máy chủ phòng.', [], true);
-  let opened = false, failed = false;
+function joinRoom(code, name, bi = 0){
+  if (!hasMqtt()) return libMissing();
+  MODE = 'guest'; NET.room = code; NET.broker = bi;
+  showMsg(`Đang vào phòng ${code}...`, 'Đang kết nối tới máy chủ trung gian.', [], true);
+  let connected = false, failed = false;
   const fail = (title, text) => {
     if (failed) return;
     failed = true; NET.leaving = true;
-    try { NET.peer && NET.peer.destroy(); } catch(e){}
-    showMsg(title, text, [
-      { label:'Chơi một mình', act:goSolo },
-      { label:'Thử lại', primary:true, act:() => location.reload() }]);
+    try { NET.client && NET.client.end(true); } catch(e){}
+    showMsg(title, text, [{ label:'Chơi một mình', act:goSolo }, { label:'Thử lại', primary:true, act:() => location.reload() }]);
   };
-  const failT = setTimeout(() => { if (!opened) fail('Chưa vào được phòng', 'Chủ phòng có thể đã thoát, hoặc mạng đang chặn kết nối trực tiếp (hay gặp với 4G). Thử lại, đổi sang Wi-Fi, hoặc nhờ chủ phòng tạo phòng mới.'); }, 20000);
-  const peer = new Peer({ config:{ iceServers:ICE } });
-  NET.peer = peer;
-  peer.on('open', () => {
-    const conn = peer.connect(ID_PREFIX + code, { reliable:true, serialization:'json' });
-    NET.host = conn;
-    conn.on('open', () => {
-      opened = true; clearTimeout(failT);
-      NET.lastHost = Date.now();
-      send(conn, { t:'hello', name, avatar:profile.avatar, token:profile.token });
-      clearInterval(NET.beat);
-      NET.beat = setInterval(() => {
-        send(conn, { t:'ping' });
-        if (Date.now() - NET.lastHost > 12000) hostLost();
-      }, 2500);
+  NET.gid = 'tlmn-g-' + code + '-' + Math.random().toString(36).slice(2, 8);
+  const client = connectBroker(bi, NET.gid, true);
+  NET.client = client;
+  NET.host = { open:true, send(msg){ client.publish(TOPIC + code + '/h', JSON.stringify({ ...msg, from:NET.gid }), { qos:1 }); } };
+  const sayHello = () => send(NET.host, { t:'hello', name:profile.name || name, avatar:profile.avatar, token:profile.token });
+  const failT = setTimeout(() => { if (!connected) fail('Chưa vào được phòng', NET_BLOCKED); }, 12000);
+  client.on('connect', () => {
+    if (NET.client !== client || failed) return;
+    const first = !connected;
+    connected = true; clearTimeout(failT);
+    client.subscribe(TOPIC + code + '/g/' + NET.gid, { qos:0 }, () => {
+      sayHello();
+      if (first){
+        NET.helloT = setTimeout(() => {
+          if (NET.welcomed) return;
+          // Keep listening: the host may just be in another app (e.g. Zalo) and will answer when back.
+          showMsg(`Chưa thấy phòng ${code} trả lời`, 'Có thể chủ phòng đang ở app khác hoặc đã khóa màn hình. Nhắn chủ phòng mở lại trang game, bạn sẽ tự vào phòng. Nếu chủ phòng đã đóng phòng, nhờ họ gửi link mới.', [
+            { label:'Chơi một mình', act:goSolo }], true);
+        }, 10000);
+      }
     });
-    conn.on('data', m => { NET.lastHost = Date.now(); onHostMsg(m); });
-    conn.on('close', hostLost);
   });
-  peer.on('error', err => {
-    if (err.type === 'peer-unavailable'){ clearTimeout(failT); fail(`Không thấy phòng ${code}`, 'Phòng này không còn, hoặc chủ phòng đã tắt trang. Nhờ chủ phòng gửi link mới nhé.'); }
-    else if (!opened){ clearTimeout(failT); fail('Lỗi kết nối', errText(err)); }
+  client.on('message', (topic, payload) => {
+    if (NET.client !== client || failed) return;
+    let m; try { m = JSON.parse(decode(payload)); } catch(e){ return; }
+    NET.lastHost = Date.now();
+    onHostMsg(m);
   });
+  clearInterval(NET.beat);
+  NET.beat = setInterval(() => {
+    if (!NET.welcomed || NET.leaving || document.visibilityState !== 'visible') return;
+    send(NET.host, { t:'ping' });
+    const gap = Date.now() - NET.lastHost;
+    if (gap > 90000) hostLost();
+    else if (gap > 10000) toast('Chủ phòng đang tạm vắng, chờ chút nha...');
+  }, 2500);
+  keepAwake();
 }
 function onHostMsg(m){
   if (!m || typeof m !== 'object') return;
   switch (m.t){
-    case 'welcome': mySeat = m.seat; hideMsg(); break;
+    case 'welcome':
+      mySeat = m.seat; NET.welcomed = true; clearTimeout(NET.helloT);
+      if (!$('#msgModal').hidden) hideMsg();
+      break;
     case 'state':
       if (!m.v) return;
+      if (!NET.welcomed){ NET.welcomed = true; clearTimeout(NET.helloT); hideMsg(); }
       V = m.v; mySeat = V.mySeat;
       sel = new Set([...sel].filter(c => V.myHand.includes(c)));
       render();
@@ -1134,18 +1245,29 @@ function onHostMsg(m){
     case 'fx': applyFx(m.type, m.a || []); break;
     case 'err': toast(m.msg); break;
     case 'rejoin': send(NET.host, { t:'hello', name:profile.name, avatar:profile.avatar, token:profile.token }); break;
-    case 'full': showMsg('Phòng đã đủ 4 người', 'Đợi có người rời phòng rồi vào lại, hoặc chơi một mình với máy.', [{ label:'Chơi một mình', primary:true, act:goSolo }]); NET.leaving = true; break;
+    case 'full': NET.leaving = true; showMsg('Phòng đã đủ 4 người', 'Đợi có người rời phòng rồi vào lại, hoặc chơi một mình với máy.', [{ label:'Chơi một mình', primary:true, act:goSolo }]); break;
     case 'closed': NET.leaving = true; showMsg('Chủ phòng đã đóng phòng', 'Ván chơi đã kết thúc.', [{ label:'Chơi một mình', primary:true, act:goSolo }]); break;
   }
 }
 function hostLost(){
   if (MODE !== 'guest' || NET.leaving) return;
   NET.leaving = true; clearInterval(NET.beat);
-  showMsg('Mất kết nối với chủ phòng', 'Có thể chủ phòng đã thoát hoặc mạng chập chờn. Nếu chủ phòng vẫn còn, bấm “Vào lại” để ngồi lại ghế cũ.', [
+  showMsg('Mất kết nối với chủ phòng', 'Lâu rồi không thấy chủ phòng trả lời. Nếu chủ phòng vẫn còn trong trang game, bấm “Vào lại” để ngồi lại ghế cũ.', [
     { label:'Chơi một mình', act:goSolo },
     { label:'Vào lại', primary:true, act:() => location.reload() }]);
 }
-function goSolo(){ NET.leaving = true; try { NET.peer && NET.peer.destroy(); } catch(e){} location.href = location.pathname; }
+// Coming back to the tab (after Zalo, a locked screen...): resync instead of declaring anyone gone.
+function onVisible(){
+  if (MODE === 'solo' || NET.leaving) return;
+  keepAwake();
+  if (MODE === 'host') wakeGuests();
+  else if (NET.welcomed){ NET.lastHost = Date.now(); send(NET.host, { t:'sync' }); }
+}
+function goSolo(){
+  if (MODE === 'guest' && NET.host) send(NET.host, { t:'bye' });
+  NET.leaving = true;
+  setTimeout(() => { try { NET.client && NET.client.end(true); } catch(e){} location.href = location.pathname; }, 150);
+}
 function leaveRoom(){
   if (MODE === 'host'){
     showMsg('Đóng phòng?', 'Mọi người trong phòng sẽ bị ngắt kết nối.', [
@@ -1261,16 +1383,21 @@ function updateCountdown(){
     tick.lastSec = left;
   }
 }
+const turnedStage = () => window.matchMedia('(orientation:portrait) and (max-width:600px) and (pointer:coarse)').matches;
+const stageW = () => turnedStage() ? window.innerHeight : window.innerWidth;
+const stageH = () => turnedStage() ? window.innerWidth : window.innerHeight;
+function shortLandscape(){ return turnedStage() || (window.innerHeight < 520 && window.innerWidth > window.innerHeight); }
 function layoutRow(rowEl, n, maxW, cwMax){
-  const cw = Math.max(36, Math.min(cwMax, maxW / 3.2));
+  const cw = Math.max(Math.min(36, cwMax), Math.min(cwMax, maxW / 3.2));
   const step = n > 1 ? Math.min(cw * 0.62, (maxW - cw) / (n - 1)) : cw;
   rowEl.style.setProperty('--cw', cw + 'px'); rowEl.style.setProperty('--step', step + 'px');
 }
 function renderPile(){
   const cur = V.table, curEl = $('#pileCur'), prevEl = $('#pilePrev'), label = $('#pileLabel');
   const pile = $('#pile'), W = pile.clientWidth - 8;
-  const cwMax = window.innerWidth < 640 ? 52 : 70;
-  pile.style.setProperty('--pcw', Math.max(36, Math.min(cwMax, W / 3.2)) + 'px');
+  let cwMax = stageW() < 640 ? 52 : 70;
+  if (shortLandscape()) cwMax = Math.min(cwMax, Math.max(28, (pile.clientHeight - 36) / 1.4));
+  pile.style.setProperty('--pcw', Math.max(Math.min(36, cwMax), Math.min(cwMax, W / 3.2)) + 'px');
   const pv = V.prevTable;
   if (pv){ layoutRow(prevEl, pv.cards.length, W, cwMax); prevEl.innerHTML = pv.cards.map(c => cardHTML(c)).join(''); }
   else prevEl.innerHTML = '';
@@ -1297,7 +1424,8 @@ function sortedHand(){
 function renderHand(){
   const el = $('#hand'), hand = sortedHand(), n = hand.length;
   const W = el.clientWidth || 600;
-  const cw = Math.max(46, Math.min(88, W / 6.4));
+  let cw = Math.max(46, Math.min(88, W / 6.4));
+  if (shortLandscape()) cw = Math.min(cw, Math.max(40, stageH() * 0.145));
   const step = n > 1 ? Math.min(cw * 0.68, (W - cw - 4) / (n - 1)) : cw;
   el.style.setProperty('--cw', cw + 'px'); el.style.setProperty('--step', step + 'px');
   const dealing = V.phase === 'play' && V.gameNo !== lastDealt && n === 13;
@@ -1394,7 +1522,7 @@ function fillEnd(){
 function fillRoom(){
   const code = V.room || NET.room || '';
   $('#roomTitle').innerHTML = `Phòng <span class="code">${esc(code)}</span>`;
-  const link = roomLink(code);
+  const link = roomLink(code, NET.broker);
   if ($('#roomLink').value !== link) $('#roomLink').value = link;
   $('#btnShare').hidden = !navigator.share;
   const lobby = V.phase === 'lobby';
@@ -1464,17 +1592,18 @@ function confetti(){
   if (window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches) return;
   const cv = $('#confetti'); cv.hidden = false;
   const ctx = cv.getContext('2d'), dpr = window.devicePixelRatio || 1;
-  cv.width = innerWidth * dpr; cv.height = innerHeight * dpr; ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  cv.hidden = false; const CW = cv.offsetWidth, CH = cv.offsetHeight;
+  cv.width = CW * dpr; cv.height = CH * dpr; ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
   const css = getComputedStyle(document.documentElement);
   const cols = ['--gold','--cinnabar','--jade-bright','--paper','--gold-soft'].map(v => css.getPropertyValue(v).trim());
-  const ps = Array.from({length:160}, () => ({ x: innerWidth/2 + (Math.random()-.5)*120, y: innerHeight*0.45,
+  const ps = Array.from({length:160}, () => ({ x: CW/2 + (Math.random()-.5)*120, y: CH*0.45,
     vx: (Math.random()-.5)*14, vy: -Math.random()*15 - 4, r: Math.random()*6 + 4, a: Math.random()*6, va: (Math.random()-.5)*.4, c: pick(cols) }));
   const t0 = performance.now();
   (function frame(t){
-    ctx.clearRect(0, 0, innerWidth, innerHeight);
+    ctx.clearRect(0, 0, CW, CH);
     ps.forEach(p => { p.vy += .35; p.vx *= .99; p.x += p.vx; p.y += p.vy; p.a += p.va;
       ctx.save(); ctx.translate(p.x, p.y); ctx.rotate(p.a); ctx.fillStyle = p.c; ctx.fillRect(-p.r/2, -p.r/4, p.r, p.r/2); ctx.restore(); });
-    if (t - t0 < 3200) requestAnimationFrame(frame); else { ctx.clearRect(0,0,innerWidth,innerHeight); cv.hidden = true; }
+    if (t - t0 < 3200) requestAnimationFrame(frame); else { ctx.clearRect(0, 0, CW, CH); cv.hidden = true; }
   })(t0);
 }
 
@@ -1631,7 +1760,7 @@ function bind(){
     const m = $('#nameModal'), name = cleanName($('#nameInput').value);
     profile.name = name; store.set('name', name);
     m.hidden = true;
-    if (m.dataset.kind === 'join') joinRoom(m.dataset.code, name);
+    if (m.dataset.kind === 'join') joinRoom(m.dataset.code, name, NET.broker);
     else createRoom(name);
   });
   $('#btnNameCancel').addEventListener('click', () => {
@@ -1662,7 +1791,11 @@ function bind(){
   window.addEventListener('beforeunload', e => {
     if (MODE === 'host' && NET.seatConn.some(Boolean) && !NET.leaving){ e.preventDefault(); e.returnValue = ''; }
   });
-  window.addEventListener('pagehide', () => { if (MODE === 'host') NET.conns.forEach(c => send(c, { t:'closed' })); });
+  window.addEventListener('pagehide', () => {
+    if (MODE === 'host') NET.conns.forEach(c => send(c, { t:'closed' }));
+    else if (MODE === 'guest' && NET.host && !NET.leaving) send(NET.host, { t:'bye' });
+  });
+  document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') onVisible(); });
 }
 
 // ================= Boot =================
@@ -1674,9 +1807,31 @@ function waitingView(){
 }
 buildSeats(); bind();
 setInterval(updateCountdown, 250);
+
+// ---- Phone orientation ----
+// Fullscreen + landscape lock works on Android Chrome; iPhone Safari has no page fullscreen, so the button stays hidden there.
+const canFull = !!(document.documentElement.requestFullscreen || document.documentElement.webkitRequestFullscreen) &&
+  (document.fullscreenEnabled || document.webkitFullscreenEnabled) && window.matchMedia('(pointer:coarse)').matches;
+async function goFullLandscape(){
+  try {
+    const el = document.documentElement;
+    if (!(document.fullscreenElement || document.webkitFullscreenElement)){
+      await (el.requestFullscreen ? el.requestFullscreen({ navigationUI:'hide' }) : el.webkitRequestFullscreen());
+    }
+    if (screen.orientation && screen.orientation.lock) await screen.orientation.lock('landscape').catch(() => {});
+  } catch(e){ toast('Trình duyệt này không cho toàn màn hình, bạn xoay ngang máy nhé'); }
+}
+$('#btnFull').hidden = !canFull;
+$('#btnFull').addEventListener('click', () => {
+  if (document.fullscreenElement || document.webkitFullscreenElement){
+    (document.exitFullscreen || document.webkitExitFullscreen).call(document);
+  } else goFullLandscape();
+});
+
 const code = (new URLSearchParams(location.search).get('phong') || '').toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 8);
+const brokerIdx = Math.max(0, Math.min(BROKERS.length - 1, parseInt(new URLSearchParams(location.search).get('s') || '0', 10) || 0));
 if (code){
-  MODE = 'guest'; NET.room = code;
+  MODE = 'guest'; NET.room = code; NET.broker = brokerIdx;
   V = waitingView(); render();
   askName('join', code);
 } else {
